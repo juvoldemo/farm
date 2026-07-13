@@ -1,9 +1,11 @@
 import type { GameStateData } from '../types/game'
+import { backupSaveGame, migrateSaveGame } from './saveMigrationService'
 export const GAME_SAVE_KEY = 'happy-farm-save-v1'
 export const saveGameState = (state: GameStateData) => localStorage.setItem(GAME_SAVE_KEY, JSON.stringify(state))
 export const loadGameState = (): GameStateData | null => {
-  try { const raw = localStorage.getItem(GAME_SAVE_KEY); return raw ? JSON.parse(raw) as GameStateData : null }
-  catch { return null }
+  const raw=localStorage.getItem(GAME_SAVE_KEY);if(!raw)return null
+  try { return migrateSaveGame(JSON.parse(raw)) }
+  catch { backupSaveGame(raw); return null }
 }
 export const clearGameState = () => localStorage.removeItem(GAME_SAVE_KEY)
 export const syncOfflineProgress = (state: GameStateData, now = Date.now()) => ({

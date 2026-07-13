@@ -1,0 +1,4 @@
+import { toast } from 'sonner'
+import { useGameStore } from '../../store/gameStore'
+import { randomEvents } from '../../config/randomEvents'
+export function RandomFarmEvent(){const state=useGameStore(s=>s.randomEventState),claim=useGameStore(s=>s.claimRandomEvent);if(!state.activeEventId||!state.expiresAt||new Date(state.expiresAt).getTime()<Date.now())return null;const event=randomEvents.find(e=>e.id===state.activeEventId);if(!event)return null;return <button className={`random-event ${event.id}`} onClick={()=>{try{const reward=claim();toast.success(reward.seeds?`Nhặt được ${reward.seeds} hạt giống!`:`Bắt được bướm vàng: +${reward.gold} vàng!`)}catch(e){toast.error(e instanceof Error?e.message:'Sự kiện đã hết')}}}><span>{event.icon}</span><b>{event.name}</b><small>Chạm để nhận quà</small></button>}

@@ -1,0 +1,2 @@
+import type { WeatherId } from '../../types/game'
+export function WeatherEffects({weather}:{weather:WeatherId}){return <div className={`weather-effects ${weather}`} aria-hidden>{weather==='rain'&&Array.from({length:18},(_,i)=><i key={i} style={{left:`${(i*37)%100}%`,animationDelay:`-${(i%7)*.13}s`}}/>)}{weather==='rainbow'&&<div className="rainbow-arc"/>}{weather==='windy'&&<><span>🍃</span><span>🍂</span></>}</div>}

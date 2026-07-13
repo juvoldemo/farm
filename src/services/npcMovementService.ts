@@ -1,0 +1,1 @@
+export { getNpcMovementState } from './npcScheduleService'

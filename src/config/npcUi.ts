@@ -1,0 +1,3 @@
+import type { NpcActivityType } from '../types/npc'
+export const npcActivityLabels:Record<NpcActivityType,string>={sleeping:'đang ngủ',waking_up:'đang thức dậy',eating:'đang dùng bữa',walking:'đang trên đường',working:'đang bán hàng',farming:'đang làm đồng',watering:'đang tưới cây',harvesting:'đang thu hoạch',cooking:'đang nấu ăn',serving_customers:'đang phục vụ khách',stocking_shelves:'đang sắp hàng',shopping:'đang đi chợ',resting:'đang nghỉ ngơi',socializing:'đang trò chuyện',cleaning:'đang dọn dẹp',reading:'đang đọc sách',repairing_tools:'đang sửa dụng cụ',staying_indoors:'đang ở trong nhà'}
+export const friendshipNames=['Người lạ','Quen biết','Hàng xóm','Bạn tốt','Thân thiết','Bạn tri kỷ']

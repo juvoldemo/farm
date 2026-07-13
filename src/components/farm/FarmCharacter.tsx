@@ -1,0 +1,2 @@
+import type { CharacterAction } from '../../hooks/useFarmCharacter'
+export function FarmCharacter({action,target}:{action:CharacterAction;target:number}){const labels:Record<CharacterAction,string>={idle:'Đang ngắm nông trại',walk:'Đang chạy tới luống',plant:'Gieo hạt',water:'Tưới cây',fertilize:'Bón phân',weed:'Nhổ cỏ',pest:'Bắt sâu',harvest:'Thu hoạch',celebrate:'Tuyệt quá!'};return <div className={`farm-character ${action}`} style={{'--target':Math.max(0,(target%6)*14)} as React.CSSProperties}><span>👩‍🌾</span><small>{labels[action]}</small></div>}

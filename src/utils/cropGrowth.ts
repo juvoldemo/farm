@@ -8,6 +8,7 @@ export const getCropGrowthPercent = (instance: CropInstance, now = Date.now()): 
 }
 export const getCropRemainingTime = (instance: CropInstance, now = Date.now()): number =>
   Math.max(0, Math.ceil((new Date(instance.readyAt).getTime() - now) / 1000))
+export const getCropRemainingSeconds = getCropRemainingTime
 export const getCropCurrentStage = (crop: CropDefinition, percent: number) =>
   crop.growthStages.find(stage => percent >= stage.startPercent && percent < stage.endPercent) ?? crop.growthStages.at(-1)!
 export const getCropGrowthState = (instance: CropInstance, crop: CropDefinition, now = Date.now()): GrowthState => {

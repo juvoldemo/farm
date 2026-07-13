@@ -1,0 +1,6 @@
+import { npcDialogues, type NpcDialogueLine } from '../config/npcDialogues'
+import type { WeatherId } from '../types/game'
+import type { NpcRuntimeState } from '../types/npc'
+const timeBucket=(hour:number)=>hour<12?'morning':hour<17?'afternoon':hour<21?'evening':'night'
+const score=(line:NpcDialogueLine)=>Number(Boolean(line.weather))*4+Number(Boolean(line.activity))*3+Number(Boolean(line.minFriendship))*2+Number(Boolean(line.shop))+Number(Boolean(line.time))
+export const getNpcDialogue=({npcId,state,weatherId,friendshipLevel,now=Date.now()}:{npcId:string;state:NpcRuntimeState;weatherId:WeatherId;friendshipLevel:number;now?:number})=>{const bucket=timeBucket(new Date(now).getHours()),shop=state.currentActivity==='working'||state.currentActivity==='serving_customers'||state.currentActivity==='stocking_shelves'?'open':'closed',lines=npcDialogues.filter(line=>line.npcId===npcId&&(!line.weather||line.weather===weatherId)&&(!line.activity||line.activity===state.currentActivity)&&(!line.time||line.time===bucket)&&(!line.shop||line.shop===shop)&&(!line.minFriendship||friendshipLevel>=line.minFriendship)),max=Math.max(...lines.map(score)),prioritized=lines.filter(line=>score(line)===max);return prioritized[Math.abs(new Date(now).getDate()+friendshipLevel)%Math.max(1,prioritized.length)]??npcDialogues.find(line=>line.npcId===npcId)!}

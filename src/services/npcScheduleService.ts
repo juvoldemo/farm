@@ -1,0 +1,22 @@
+import { npcSchedules } from '../config/npcSchedules'
+import type { GameTimeState, NpcMovementState, NpcNeedsState, NpcRuntimeState, NpcScheduleEntry } from '../types/npc'
+import type { WeatherId } from '../types/game'
+
+export const timeToMinutes=(value:string)=>{const [hour,minute]=value.split(':').map(Number);return hour*60+minute}
+export const getGameTimeState=(now:number,weatherId:WeatherId):GameTimeState=>{const date=new Date(now);return{currentDateTime:date.toISOString(),hour:date.getHours(),minute:date.getMinutes(),dayOfWeek:date.getDay(),weatherId,timeMode:'real_time'}}
+const contains=(entry:NpcScheduleEntry,minute:number)=>{const start=timeToMinutes(entry.startTime),end=timeToMinutes(entry.endTime);return start<end?minute>=start&&minute<end:minute>=start||minute<end}
+const scheduleDate=(now:Date,time:string,dayShift=0)=>{const [hour,minute]=time.split(':').map(Number),date=new Date(now);date.setDate(date.getDate()+dayShift);date.setHours(hour,minute,0,0);return date}
+export const resolveNpcSchedule=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny'):NpcScheduleEntry=>{const date=new Date(now),minute=date.getHours()*60+date.getMinutes(),list=npcSchedules[npcId];let entry=list.find(item=>contains(item,minute))??list[0]
+ if(npcId==='hoa'&&date.getDay()===0&&minute>=16*60&&minute<19*60)entry={...entry,id:'hoa-sunday-social',locationId:'village_square',activity:'socializing',shopState:'closed'}
+ if(npcId==='ba'&&weatherId==='rain'&&(entry.activity==='farming'||entry.activity==='watering'))entry={...entry,id:`${entry.id}-rain`,locationId:'ba_home',activity:'repairing_tools'}
+ return entry}
+export const getNpcCurrentSchedule=resolveNpcSchedule
+export const getNpcCurrentLocation=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny')=>resolveNpcSchedule(npcId,now,weatherId).locationId
+export const getNpcCurrentActivity=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny')=>resolveNpcSchedule(npcId,now,weatherId).activity
+export const getNpcShopAvailability=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny')=>resolveNpcSchedule(npcId,now,weatherId).shopState??'closed'
+export const getNpcNextActivity=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny')=>{const current=resolveNpcSchedule(npcId,now,weatherId),list=npcSchedules[npcId],index=list.findIndex(item=>item.id===current.id);return index>=0?list[(index+1)%list.length]:list[0]}
+export const getNpcTimeUntilNextActivity=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny')=>{const current=resolveNpcSchedule(npcId,now,weatherId),date=new Date(now),end=timeToMinutes(current.endTime),minute=date.getHours()*60+date.getMinutes(),delta=end>minute?end-minute:end+1440-minute;return delta*60}
+export const getNpcMovementState=(entry:NpcScheduleEntry,now=Date.now()):NpcMovementState|undefined=>{if(entry.activity!=='walking'||!entry.fromLocationId||!entry.toLocationId)return undefined;const date=new Date(now),minute=date.getHours()*60+date.getMinutes(),startMinute=timeToMinutes(entry.startTime),cross=startMinute>timeToMinutes(entry.endTime),startedAt=scheduleDate(date,entry.startTime,cross&&minute<startMinute?-1:0),arrivesAt=scheduleDate(date,entry.endTime,cross&&minute>=startMinute?1:0),duration=Math.max(1,arrivesAt.getTime()-startedAt.getTime());return{fromLocationId:entry.fromLocationId,toLocationId:entry.toLocationId,startedAt:startedAt.toISOString(),arrivesAt:arrivesAt.toISOString(),progress:Math.max(0,Math.min(1,(now-startedAt.getTime())/duration))}}
+const needsAt=(date:Date,activity:NpcScheduleEntry['activity']):NpcNeedsState=>{const hour=date.getHours()+date.getMinutes()/60,energy=Math.round(Math.max(15,100-Math.max(0,hour-6)*4)),meal=activity==='eating',hunger=meal?10:Math.round(Math.min(100,20+(hour%6)*12)),workProgress=Math.round(((hour%8)/8)*100);return{energy,hunger,social:activity==='socializing'?90:50,workProgress,lastUpdatedAt:date.toISOString()}}
+export const getNpcStateAtTime=(npcId:string,now=Date.now(),weatherId:WeatherId='sunny'):NpcRuntimeState=>{const entry=resolveNpcSchedule(npcId,now,weatherId),movementState=getNpcMovementState(entry,now);return{npcId,currentLocationId:entry.locationId,currentActivity:entry.activity,scheduleEntryId:entry.id,movementState,needsState:needsAt(new Date(now),entry.activity),lastUpdatedAt:new Date(now).toISOString()}}
+export const syncNpcOfflineProgress=(npcIds:string[],now:number,weatherId:WeatherId)=>Object.fromEntries(npcIds.map(id=>[id,getNpcStateAtTime(id,now,weatherId)]))
