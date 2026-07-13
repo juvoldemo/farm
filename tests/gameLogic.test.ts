@@ -1,0 +1,32 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { crops } from '../src/config/crops'
+import { fertilizers } from '../src/config/fertilizers'
+import type { CropInstance } from '../src/types/game'
+import { applyFertilizer, getCropCurrentStage, getCropGrowthPercent, getCropGrowthState, getCropRemainingTime } from '../src/utils/cropGrowth'
+import { calculatePlayerLevel } from '../src/utils/level'
+import { syncOfflineProgress } from '../src/services/storageService'
+import { getGameSnapshot, useGameStore } from '../src/store/gameStore'
+
+const cabbage=crops[0]
+const instance=(planted:number,ready:number):CropInstance=>({id:'c1',cropId:cabbage.id,plotId:'plot-1',plantedAt:new Date(planted).toISOString(),readyAt:new Date(ready).toISOString(),baseGrowthDuration:60,totalReductionSeconds:0,fertilizerUsage:[],lastCalculatedAt:new Date(planted).toISOString()})
+
+describe('logic thời gian cây trồng',()=>{
+ it('tính đúng phần trăm và không vượt biên',()=>{const crop=instance(0,100_000);expect(getCropGrowthPercent(crop,50_000)).toBe(50);expect(getCropGrowthPercent(crop,200_000)).toBe(100);expect(getCropGrowthPercent(crop,-1)).toBe(0)})
+ it('chọn đúng 5 giai đoạn',()=>{expect(getCropCurrentStage(cabbage,0).key).toBe('seed');expect(getCropCurrentStage(cabbage,20).key).toBe('sprout');expect(getCropCurrentStage(cabbage,50).key).toBe('young');expect(getCropCurrentStage(cabbage,75).key).toBe('mature');expect(getCropCurrentStage(cabbage,95).key).toBe('fruit')})
+ it('tính thời gian còn lại và trạng thái chín',()=>{const crop=instance(0,60_000);expect(getCropRemainingTime(crop,20_000)).toBe(40);expect(getCropGrowthState(crop,cabbage,60_001).isReadyToHarvest).toBe(true)})
+ it('phân thường giảm thời gian nhưng luôn chừa 10 giây',()=>{const crop=instance(0,60_000),result=applyFertilizer(crop,fertilizers[0],0);expect(result.reductionSeconds).toBe(50);expect(getCropRemainingTime(result.instance,0)).toBe(10)})
+ it('phân phần trăm giảm theo thời gian còn lại',()=>{const crop=instance(0,100_000),result=applyFertilizer(crop,fertilizers[3],20_000);expect(result.reductionSeconds).toBe(20);expect(getCropRemainingTime(result.instance,20_000)).toBe(60)})
+ it('không cho bón cây đã chín',()=>expect(()=>applyFertilizer(instance(0,10_000),fertilizers[0],11_000)).toThrow(/đã chín/))
+})
+
+describe('giao dịch và tiến trình',()=>{
+ beforeEach(()=>{localStorage.clear();useGameStore.getState().resetGame()})
+ it('không mở đất khi thiếu vàng',()=>expect(()=>useGameStore.getState().unlockPlot('plot-4')).toThrow(/Không đủ vàng/))
+ it('không mua hạt khi thiếu vàng',()=>{useGameStore.setState(s=>({player:{...s.player,level:3,gold:0}}));expect(()=>useGameStore.getState().buyItem('seed','corn')).toThrow(/Không đủ tiền/)})
+ it('không thu hoạch cây chưa chín',()=>{useGameStore.getState().plantCrop('plot-1','cabbage');expect(()=>useGameStore.getState().harvestCrop('plot-1')).toThrow(/chưa chín/)})
+ it('thu hoạch cộng kho và XP',()=>{useGameStore.getState().plantCrop('plot-1','cabbage');useGameStore.getState().devFinishCrops();const reward=useGameStore.getState().harvestCrop('plot-1');expect(reward.quantity).toBe(3);expect(useGameStore.getState().player.currentXp).toBe(4);expect(useGameStore.getState().inventory.find(i=>i.itemType==='produce'&&i.referenceId==='cabbage')?.quantity).toBe(3)})
+ it('cộng XP có thể lên nhiều cấp',()=>{const value=calculatePlayerLevel(1,90,200);expect(value.level).toBe(3);expect(value.currentXp).toBe(30);expect(value.levelsGained).toBe(2)})
+ it('đồng bộ offline chỉ báo cây chín, không tự thu hoạch',()=>{const state=useGameStore.getState();const planted=instance(Date.now()-120_000,Date.now()-60_000);const snapshot={...state,plots:state.plots.map((p,i)=>i===0?{...p,cropInstance:planted}:p),player:{...state.player,lastLoginAt:new Date(Date.now()-120_000).toISOString()}};const result=syncOfflineProgress(snapshot);expect(result.elapsedSeconds).toBeGreaterThanOrEqual(119);expect(result.readyCrops).toBe(1);expect(snapshot.plots[0].cropInstance).toBeDefined()})
+ it('tạo snapshot cloud chỉ gồm dữ liệu game cần thiết',()=>{const snapshot=getGameSnapshot();expect(snapshot.plots).toHaveLength(24);expect(snapshot).not.toHaveProperty('plantCrop');expect(snapshot).not.toHaveProperty('timeOffsetMs')})
+ it('khôi phục đầy đủ snapshot tải từ cloud',()=>{const snapshot=getGameSnapshot();const cloud={...snapshot,player:{...snapshot.player,gold:4321},tutorialStep:7};useGameStore.getState().replaceGameData(cloud);expect(useGameStore.getState().player.gold).toBe(4321);expect(useGameStore.getState().tutorialStep).toBe(7);expect(useGameStore.getState().plots).toHaveLength(24)})
+})

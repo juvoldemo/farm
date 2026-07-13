@@ -1,0 +1,123 @@
+# Nông Trại Vui Vẻ
+
+Game nông trại web nguyên bản, responsive và chơi được hoàn chỉnh theo vòng lặp: **gieo hạt → chờ thời gian thật → bón phân → thu hoạch → bán nông sản → mở rộng đất**.
+
+## Chạy dự án
+
+Yêu cầu: Node.js 20.19+ (khuyến nghị Node.js 22 hoặc 24).
+
+```bash
+npm install
+npm run dev
+```
+
+Mở địa chỉ Vite hiển thị trong terminal (mặc định `http://localhost:5173`).
+
+```bash
+npm test        # chạy unit test
+npm run build   # build production vào dist/
+npm run preview # xem bản production
+```
+
+Không cần tài khoản demo: MVP khởi tạo người chơi cục bộ tên **Bé Nông Dân** với cấp 1, 300 vàng, 5 kim cương, 10 hạt cải, 5 hạt cà rốt, 2 phân bón nhỏ và 3 luống mở sẵn.
+
+## Tính năng đã hoàn thành
+
+- Đúng 24 luống đất, 3 luống đầu mở sẵn; giá và cấp yêu cầu tăng dần.
+- 12 loại cây độc lập, mỗi cây có 5 giai đoạn hình ảnh/biểu tượng, giá, sản lượng, XP và thời gian riêng.
+- Thời gian sinh trưởng dựa trên `plantedAt`/`readyAt`, không phụ thuộc bộ đếm UI; đóng trang rồi quay lại cây vẫn lớn.
+- Popup “Trong lúc bạn vắng mặt”, báo cây đã chín nhưng không tự thu hoạch.
+- Gieo hạt từ kho hoặc mua nhanh khi hết hạt.
+- 5 loại phân bón: theo giây, theo phần trăm và hoàn thành ngay; có giới hạn sử dụng, không làm thời gian âm.
+- Thu hoạch vào kho, giới hạn sức chứa, cộng XP và tự lên cấp.
+- Kho đồ và bán toàn bộ từng loại nông sản lấy vàng.
+- Cửa hàng hạt giống/phân bón, kiểm tra tiền, cấp và sức chứa.
+- Nhiệm vụ tiến trình, tutorial 7 bước, cài đặt chuyển động/âm thanh và reset xác nhận 2 bước.
+- Đăng ký/đăng nhập email với Supabase Auth và tự đồng bộ nông trại trên nhiều thiết bị.
+- Supabase RLS bảo vệ bản lưu theo `user_id`; LocalStorage tiếp tục làm cache offline.
+- Responsive: 3 cột mobile, 4 cột tablet, 6 cột desktop; bottom navigation trên mobile.
+- Bảng DEV: thêm tiền, lên cấp, làm chín cây, mở đất, tua thời gian.
+- 12 unit test cho thời gian, giai đoạn, phân bón, giao dịch, thu hoạch, XP và offline sync.
+- Ảnh nền nông trại nguyên bản được tạo riêng cho dự án; không dùng tài sản của game thương mại.
+
+## Chưa hoàn thành / sẵn sàng mở rộng
+
+- Xác thực toàn bộ giao dịch gameplay phía máy chủ để chống gian lận cạnh tranh (cloud save hiện vẫn nhận snapshot từ client).
+- Bạn bè, thăm nông trại, chợ người chơi, bảng xếp hạng.
+- Trang trí có thể đặt tự do, bản đồ nhiều khu vực, thời tiết ảnh hưởng gameplay.
+- Tệp âm thanh thật và nhạc nền (cài đặt đã có cấu trúc UI).
+- Daily reward thật và nhiệm vụ nhận thưởng; hiện là giao diện/tiến trình mẫu.
+- Cây tái sinh nhiều lần và sâu bệnh.
+
+## Cấu trúc chính
+
+```text
+src/
+  assets/                 # ảnh nền nguyên bản
+  components/             # UI farm, popup, cửa hàng, kho
+  config/
+    crops.ts              # 12 cây và 5 giai đoạn
+    fertilizers.ts        # 5 loại phân bón
+    plotUnlockConfig.ts   # giá/cấp của 24 luống
+  hooks/useGameClock.ts   # đồng hồ hiển thị
+  pages/FarmPage.tsx      # màn hình game chính
+  services/storageService.ts
+  store/gameStore.ts      # trạng thái và action gameplay
+  types/game.ts
+  utils/                  # thời gian, tăng trưởng, XP, tiền tệ
+tests/gameLogic.test.ts
+```
+
+## Điều chỉnh dữ liệu game
+
+### Thêm hoặc sửa cây
+
+Chỉnh `src/config/crops.ts`. Mỗi cây cần ID duy nhất, giá hạt, giá bán, thời gian giây, cấp mở, sản lượng, XP và đủ 5 mục trong `growthStages`. Không cần sửa component; cửa hàng và popup gieo hạt đọc trực tiếp cấu hình này.
+
+### Thêm phân bón
+
+Chỉnh `src/config/fertilizers.ts`, chọn `reductionType`:
+
+- `seconds`: giảm số giây trong `reductionValue`.
+- `percentage`: giảm phần trăm thời gian còn lại.
+- `instant`: hoàn thành ngay.
+
+Khai báo giá vàng hoặc kim cương và `maxUsesPerCrop`. UI cửa hàng/cây tự nhận loại mới.
+
+### Đổi giá mở đất
+
+Chỉnh mảng `prices` và hàm `requiredLevel` trong `src/config/plotUnlockConfig.ts`. Giá không được hard-code trong UI/store.
+
+## Kết nối Supabase
+
+1. Tạo một project tại [Supabase Dashboard](https://supabase.com/dashboard).
+2. Mở **SQL Editor**, dán và chạy toàn bộ file `supabase/migrations/001_game_saves.sql`. File này tạo bảng `game_saves`, trigger timestamp và bốn policy RLS.
+3. Trong **Project Settings → API**, sao chép Project URL và publishable/anon key.
+4. Sao chép `.env.example` thành `.env.local`:
+
+```env
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-publishable-anon-key
+```
+
+5. Khởi động lại `npm run dev`. Chạm vào hồ sơ người chơi ở góc trên để đăng ký hoặc đăng nhập.
+
+Không đưa `service_role` key vào frontend. Chỉ dùng publishable/anon key; quyền dữ liệu được giới hạn bằng RLS.
+
+Nếu **Confirm email** đang bật trong Supabase Auth, tài khoản mới phải bấm liên kết xác nhận trong email trước khi đăng nhập. Khi triển khai production, thêm domain production vào **Authentication → URL Configuration**.
+
+## Cách lưu và thời gian offline
+
+Zustand persist lưu cache dưới key `happy-farm-save-v1`. Khi đăng nhập, cloud luôn được tải trước để dữ liệu mặc định của thiết bị mới không ghi đè nông trại. Nếu tài khoản chưa có bản cloud, tiến trình khách hiện tại được nhập làm bản đầu tiên. Mỗi thay đổi được tự lưu sau 900 ms; khi mất mạng game dùng cache và tự đồng bộ lại khi online.
+
+Mỗi cây lưu timestamp ISO tuyệt đối. `getCropGrowthState()` so sánh thời gian hiện tại với `plantedAt` và `readyAt`; interval một giây chỉ làm mới phần hiển thị.
+
+Dữ liệu cloud được tách riêng theo tài khoản. Dù vậy, snapshot gameplay vẫn được tính ở client nên đây chưa phải cơ chế chống gian lận cho bảng xếp hạng hoặc kinh tế nhiều người chơi.
+
+## Lộ trình tăng cường backend
+
+Cloud save, Auth và RLS đã hoạt động. Nếu bổ sung kinh tế cạnh tranh hoặc tính năng xã hội, bước tiếp theo là chuẩn hóa snapshot thành các bảng `players`, `farm_plots`, `crop_instances`, `inventory_items` và chuyển mua/bán/thu hoạch sang PostgreSQL function hoặc Edge Function có transaction. Backend phải dùng thời gian server, kiểm tra số dư/quyền sở hữu và khóa thu hoạch kép.
+
+## Tài sản hình ảnh
+
+`src/assets/farm-background.png` được tạo bằng công cụ tạo ảnh tích hợp với prompt phong cảnh nông trại hoạt hình 2D nguyên bản, không chữ/logo/nhân vật và không mô phỏng trực tiếp giao diện hay tài sản của bất kỳ game cụ thể nào.
