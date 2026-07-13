@@ -8,6 +8,7 @@ import { syncOfflineProgress } from '../src/services/storageService'
 import { getGameSnapshot, useGameStore } from '../src/store/gameStore'
 import { calculateHarvestYield } from '../src/utils/harvestYield'
 import { migrateSaveGame, validateSaveGame } from '../src/services/saveMigrationService'
+import { getCropEconomy } from '../src/utils/cropEconomy'
 
 const cabbage=crops[0]
 const instance=(planted:number,ready:number):CropInstance=>({id:'c1',cropId:cabbage.id,plotId:'plot-1',plantedAt:new Date(planted).toISOString(),readyAt:new Date(ready).toISOString(),baseGrowthDuration:60,totalReductionSeconds:0,fertilizerUsage:[],lastCalculatedAt:new Date(planted).toISOString()})
@@ -45,6 +46,10 @@ describe('sản lượng có seed',()=>{
  it('cùng seed cho kết quả giống nhau và luôn là số nguyên',()=>{const input={crop:cabbage,careState:{water:100,weeds:false,pests:false},weather:'rainbow' as const,randomSeed:12345};const a=calculateHarvestYield(input),b=calculateHarvestYield(input);expect(a).toEqual(b);expect(Number.isInteger(a.finalQuantity)).toBe(true);expect(a.finalQuantity).toBeGreaterThanOrEqual(cabbage.minHarvestQuantity)})
  it('care tốt không làm giảm sản lượng',()=>{const good=calculateHarvestYield({crop:cabbage,careState:{water:100,weeds:false,pests:false},randomSeed:44}),bad=calculateHarvestYield({crop:cabbage,careState:{water:0,weeds:true,pests:true},randomSeed:44});expect(good.careBonus).toBeGreaterThanOrEqual(bad.careBonus)})
  it('không thể thu hoạch cùng một cây hai lần',()=>{useGameStore.getState().plantCrop('plot-1','cabbage');useGameStore.getState().devFinishCrops();useGameStore.getState().harvestCrop('plot-1');expect(()=>useGameStore.getState().harvestCrop('plot-1')).toThrow(/Không có cây/)})
+})
+
+describe('giá trị kinh tế cây trồng',()=>{
+ it('tính đúng doanh thu và lợi nhuận so với giá hạt',()=>{const value=getCropEconomy(cabbage);expect(value.seedCost).toBe(10);expect(value.minRevenue).toBe(18);expect(value.baseRevenue).toBe(24);expect(value.maxNormalRevenue).toBe(42);expect(value.minProfit).toBe(8);expect(value.baseProfit).toBe(14);expect(value.maxNormalProfit).toBe(32)})
 })
 
 describe('migrate và giao dịch đơn hàng',()=>{
