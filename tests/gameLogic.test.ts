@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { crops } from '../src/config/crops'
+import { crops, GROWTH_TIME_MULTIPLIER } from '../src/config/crops'
 import { fertilizers } from '../src/config/fertilizers'
 import type { CropInstance } from '../src/types/game'
 import { applyFertilizer, getCropCurrentStage, getCropGrowthPercent, getCropGrowthState, getCropRemainingTime } from '../src/utils/cropGrowth'
@@ -9,6 +9,13 @@ import { getGameSnapshot, useGameStore } from '../src/store/gameStore'
 
 const cabbage=crops[0]
 const instance=(planted:number,ready:number):CropInstance=>({id:'c1',cropId:cabbage.id,plotId:'plot-1',plantedAt:new Date(planted).toISOString(),readyAt:new Date(ready).toISOString(),baseGrowthDuration:60,totalReductionSeconds:0,fertilizerUsage:[],lastCalculatedAt:new Date(planted).toISOString()})
+
+describe('cấu hình thời gian sinh trưởng',()=>{
+ it('áp dụng hệ số 20 lần cho tất cả cây',()=>{
+   expect(GROWTH_TIME_MULTIPLIER).toBe(20)
+   expect(crops.map(crop=>crop.growthDurationSeconds)).toEqual([60,180,600,1800,2700,3600,10800,18000,28800,43200,64800,86400].map(seconds=>seconds*20))
+ })
+})
 
 describe('logic thời gian cây trồng',()=>{
  it('tính đúng phần trăm và không vượt biên',()=>{const crop=instance(0,100_000);expect(getCropGrowthPercent(crop,50_000)).toBe(50);expect(getCropGrowthPercent(crop,200_000)).toBe(100);expect(getCropGrowthPercent(crop,-1)).toBe(0)})
