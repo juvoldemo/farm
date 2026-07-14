@@ -21,8 +21,16 @@ import { useFarmCharacter } from '../hooks/useFarmCharacter'
 import { randomChance } from '../utils/random'
 import { randomEvents } from '../config/randomEvents'
 import { VillageDevTools, VillagePage } from '../components/village/VillagePage'
+import { FriendsPanel } from '../components/FriendsPanel'
+import { NotificationsPanel } from '../components/NotificationsPanel'
+import { FriendFarmView } from '../components/FriendFarmView'
+import type { FriendFarm } from '../types/database'
+import { useAuth } from '../contexts/AuthContext'
+import { loadNotifications } from '../services/notificationService'
+import { supabase } from '../services/supabaseClient'
+import { HybridJournalPanel } from '../components/GeneticsPanels'
 
-type Panel = null|'shop-seed'|'shop-fertilizer'|'inventory'|'missions'|'settings'|'daily'|'account'
+type Panel = null|'shop-seed'|'shop-fertilizer'|'inventory'|'genetics'|'missions'|'settings'|'daily'|'account'|'friends'|'notifications'
 const tutorial=[
   'Chạm vào luống đất số 1 để bắt đầu trồng cây.',
   'Chọn hạt cải xanh — loại cây lớn nhanh nhất.',
@@ -34,25 +42,27 @@ const tutorial=[
 ]
 
 export function FarmPage(){
+ const auth=useAuth()
  const {plots,player,stats,timeOffsetMs,tutorialStep,setTutorialStep,markLogin,currentWeather,refreshWeather,ensureOrders,spawnRandomEvent}=useGameStore()
  const character=useFarmCharacter()
- const now=useGameClock(timeOffsetMs),[view,setView]=useState<'farm'|'village'>(()=>new URLSearchParams(window.location.search).get('view')==='village'?'village':'farm'),[selected,setSelected]=useState<FarmPlot>(),[mode,setMode]=useState<'seed'|'crop'|'unlock'>(),[panel,setPanel]=useState<Panel>(null),[offline,setOffline]=useState<{seconds:number;ready:number}|null>(null)
+ const now=useGameClock(timeOffsetMs),[view,setView]=useState<'farm'|'village'>(()=>new URLSearchParams(window.location.search).get('view')==='village'?'village':'farm'),[selected,setSelected]=useState<FarmPlot>(),[mode,setMode]=useState<'seed'|'crop'|'unlock'>(),[panel,setPanel]=useState<Panel>(null),[offline,setOffline]=useState<{seconds:number;ready:number}|null>(null),[friendFarm,setFriendFarm]=useState<FriendFarm|null>(null),[unread,setUnread]=useState(0)
  const initialized=useRef(false)
  useEffect(()=>{if(initialized.current)return;initialized.current=true;const saved=new Date(player.lastLoginAt).getTime(),seconds=Math.max(0,Math.floor((Date.now()-saved)/1000)),ready=plots.filter(p=>p.cropInstance&&new Date(p.cropInstance.readyAt).getTime()<=Date.now()+timeOffsetMs).length;if(seconds>=60)setOffline({seconds,ready});markLogin()},[])
  useEffect(()=>{refreshWeather();ensureOrders();const id=window.setInterval(()=>refreshWeather(),30_000);return()=>clearInterval(id)},[refreshWeather,ensureOrders])
  useEffect(()=>{const id=window.setInterval(()=>{const s=useGameStore.getState(),expired=!s.randomEventState.expiresAt||new Date(s.randomEventState.expiresAt).getTime()<Date.now(),today=new Date().toISOString().slice(0,10),claimed=s.randomEventState.dayKey===today?s.randomEventState.claimedToday:0,last=s.randomEventState.lastEventAt?new Date(s.randomEventState.lastEventAt).getTime():0;const event=randomEvents.find(item=>s.player.level>=item.minLevel&&claimed<item.dailyLimit&&Date.now()-last>=item.cooldownMinutes*60_000&&randomChance(item.spawnChance));if((!s.randomEventState.activeEventId||expired)&&event)spawnRandomEvent(event.id)},30_000);return()=>clearInterval(id)},[spawnRandomEvent])
+ useEffect(()=>{const client=supabase;if(!auth.session||!client)return;const refresh=()=>void loadNotifications().then(items=>setUnread(items.filter(item=>!item.isRead).length));refresh();const channel=client.channel(`notifications:${auth.session.user.id}`).on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:`user_id=eq.${auth.session.user.id}`},refresh).subscribe();return()=>{void client.removeChannel(channel)}},[auth.session])
  const ready=useMemo(()=>plots.filter(p=>p.cropInstance&&new Date(p.cropInstance.readyAt).getTime()<=now).length,[plots,now])
  const handlePlot=(plot:FarmPlot)=>{setSelected(plot);setMode(!plot.isUnlocked?'unlock':plot.cropInstance?'crop':'seed')}
  const closePlot=()=>{setSelected(undefined);setMode(undefined)}
- const nav=(id:string)=>{if(id==='shop'||id==='seeds')setPanel('shop-seed');else if(id==='fertilizer')setPanel('shop-fertilizer');else if(id==='inventory')setPanel('inventory');else if(id==='missions')setPanel('missions');else toast.info(id==='friends'?'Bạn bè sẽ mở trong bản cập nhật xã hội.':id==='decor'?'Trang trí đang được chuẩn bị.':'Bản đồ vùng đất mới sắp mở!')}
+ const nav=(id:string)=>{if(id==='shop')setPanel('shop-seed');else if(id==='genetics')setPanel('genetics');else if(id==='fertilizer')setPanel('shop-fertilizer');else if(id==='inventory')setPanel('inventory');else if(id==='missions')setPanel('missions');else toast.info(id==='friends'?'Bạn bè sẽ mở trong bản cập nhật xã hội.':id==='decor'?'Trang trí đang được chuẩn bị.':'Bản đồ vùng đất mới sắp mở!')}
  const hour=new Date(now).getHours(),dayPhase=hour>=5&&hour<9?'dawn':hour>=9&&hour<17?'day':hour>=17&&hour<19?'sunset':'night'
  return <div className={`game-shell weather-${currentWeather.id} phase-${dayPhase} ${player.settings.reducedMotion?'reduce-motion':''}`}>
   <Toaster richColors position="top-center"/>
   <FarmBackground/><WeatherEffects weather={currentWeather.id}/><div className="sky-decor"><i/><i/><i/></div>
-  <TopBar onMissions={()=>setPanel('missions')} onSettings={()=>setPanel('settings')} onDaily={()=>setPanel('daily')} onAccount={()=>setPanel('account')}/>
-  {view==='farm'?<main className="farm-layout">
+  <TopBar unread={unread} onFriends={()=>setPanel('friends')} onNotifications={()=>setPanel('notifications')} onMissions={()=>setPanel('missions')} onSettings={()=>setPanel('settings')} onDaily={()=>setPanel('daily')} onAccount={()=>setPanel('account')}/>
+  {view==='farm'?friendFarm?<FriendFarmView farm={friendFarm} onBack={()=>setFriendFarm(null)}/>:<><div className="farm-shortcuts"><button className="village-path" onClick={()=>setView('village')}><Users/> Sang Xóm nhỏ <ChevronRight/></button></div><main className="farm-layout">
    <section className="farm-board">
-    <div className="farm-title"><div><span className="eyebrow"><CloudSun/> Thung lũng Hoa Nắng</span><h1>Nông trại của bạn</h1><p>Gieo niềm vui, gặt mùa vàng!</p></div><button className="village-path" onClick={()=>setView('village')}><Users/> Sang Xóm nhỏ <ChevronRight/></button><div className="season"><span>🌻</span><div><small>Mùa hiện tại</small><b>Mùa nắng</b></div></div></div>
+    <div className="farm-title"><div className="season"><span>🌻</span><div><small>Mùa hiện tại</small><b>Mùa nắng</b></div></div></div>
     <div className="farm-grid" aria-label="24 luống đất">{plots.map(plot=><FarmPlotCard key={plot.id} plot={plot} now={now} onClick={()=>handlePlot(plot)} highlight={tutorialStep===0&&plot.plotNumber===1}/>)}</div>
     <FarmCharacter action={character.action} target={character.target}/><RandomFarmEvent/>
     <div className="farm-tip"><Sparkles/> Mẹo: cây vẫn tiếp tục lớn khi bạn rời nông trại.</div>
@@ -63,15 +73,17 @@ export function FarmPage(){
     <section className="side-card weather"><CloudSun/><div><small>Thời tiết</small><b>{currentWeather.id==='sunny'?'☀️ Nắng nhẹ':currentWeather.id==='rain'?'🌧️ Mưa xuân':currentWeather.id==='cloudy'?'☁️ Nhiều mây':currentWeather.id==='windy'?'🌬️ Gió đồng':'🌈 Cầu vồng'}</b><span>{currentWeather.id==='rain'?'Cây được tưới tự động':currentWeather.id==='rainbow'?'Tăng cơ hội thu hoạch may mắn':'Thời tiết đang ảnh hưởng mùa vụ'}</span></div></section>
     <OrderBoard/>
    </aside>
-  </main>:<><VillagePage now={now} onBack={()=>setView('farm')}/>{import.meta.env.DEV&&<VillageDevTools/>}</>}
+  </main></>:<><VillagePage now={now} onBack={()=>setView('farm')}/>{import.meta.env.DEV&&<VillageDevTools/>}</>}
   <BottomNav onSelect={nav}/>
   <SeedPicker plot={mode==='seed'?selected:undefined} onClose={closePlot}/><CropPanel plot={mode==='crop'?selected:undefined} now={now} onClose={closePlot}/><UnlockPanel plot={mode==='unlock'?selected:undefined} onClose={closePlot}/>
   <ShopPanel open={panel==='shop-seed'||panel==='shop-fertilizer'} initialTab={panel==='shop-fertilizer'?'fertilizer':'seed'} onClose={()=>setPanel(null)}/><InventoryPanel open={panel==='inventory'} onClose={()=>setPanel(null)}/><MissionsPanel open={panel==='missions'} onClose={()=>setPanel(null)}/><SettingsPanel open={panel==='settings'} onClose={()=>setPanel(null)}/><DailyPanel open={panel==='daily'} onClose={()=>setPanel(null)}/>
+  <HybridJournalPanel open={panel==='genetics'} onClose={()=>setPanel(null)}/>
   <AccountPanel open={panel==='account'} onClose={()=>setPanel(null)}/>
+  <FriendsPanel open={panel==='friends'} onClose={()=>setPanel(null)} onVisit={setFriendFarm}/><NotificationsPanel open={panel==='notifications'} onClose={()=>setPanel(null)} onCount={setUnread}/>
   <Modal open={!!offline} title="Trong lúc bạn vắng mặt" onClose={()=>setOffline(null)}><div className="offline"><Clock/><h3>Thời gian trôi thật nhanh!</h3><p>Bạn đã rời nông trại <b>{offline&&formatRemainingTime(offline.seconds)}</b>.</p><div><Sprout/> {offline?.ready?`${offline.ready} cây đã chín và đang chờ bạn.`:'Cây trồng vẫn tiếp tục lớn khỏe.'}</div><button className="primary" onClick={()=>setOffline(null)}>Về nông trại</button></div></Modal>
   <AnimatePresence>{tutorialStep<tutorial.length&&<motion.aside className="tutorial-card" initial={{y:30,opacity:0}} animate={{y:0,opacity:1}} exit={{opacity:0}}><div className="guide-avatar">👩‍🌾</div><div><small>HƯỚNG DẪN · {tutorialStep+1}/{tutorial.length}</small><b>{tutorial[tutorialStep]}</b><div className="tutorial-actions"><button onClick={()=>setTutorialStep(tutorial.length)}>Bỏ qua</button><button onClick={()=>setTutorialStep(tutorialStep+1)}>{tutorialStep===tutorial.length-1?'Hoàn tất':'Tiếp tục'} <ChevronRight/></button></div></div></motion.aside>}</AnimatePresence>
   {import.meta.env.DEV&&<DevPanel/>}
  </div>
 }
 
-function DevPanel(){const s=useGameStore();const [open,setOpen]=useState(false),plantSample=()=>{const plot=useGameStore.getState().plots.find(p=>p.isUnlocked&&!p.cropInstance);if(plot)try{useGameStore.getState().plantCrop(plot.id,'cabbage',true)}catch(e){toast.error(e instanceof Error?e.message:'Không thể trồng')}},addProblem=(kind:'weeds'|'pests'|'dry')=>useGameStore.setState(state=>({plots:state.plots.map(p=>p.cropInstance?{...p,cropInstance:{...p.cropInstance,care:{...(p.cropInstance.care??{water:50,weeds:false,pests:false}),...(kind==='dry'?{water:0}:kind==='weeds'?{weeds:true}:{pests:true})}}}:p)}));return <aside className={`dev-panel ${open?'open':''}`}><button className="dev-toggle" onClick={()=>setOpen(!open)}>🛠️ DEV</button>{open&&<div><b>Bảng kiểm thử</b><button onClick={s.devAddGold}><Coins/> +10.000 vàng</button><button onClick={s.devAddDiamonds}>💎 +100 kim cương</button><button onClick={s.devLevelUp}><Trophy/> Lên cấp</button><button onClick={plantSample}>🌱 Trồng cây mẫu</button><button onClick={s.devFinishCrops}><CheckCircle2/> Chín tất cả cây</button><button onClick={s.devUnlockAll}>🔓 Mở toàn bộ đất</button><button onClick={()=>useGameStore.setState(st=>({plots:st.plots.map((p,i)=>({...p,isUnlocked:i<3}))}))}>🔒 Khóa lại đất</button><button onClick={()=>s.refreshWeather('rain')}>🌧️ Bật mưa</button><button onClick={()=>s.refreshWeather('rainbow')}>🌈 Bật cầu vồng</button><button onClick={()=>addProblem('dry')}>🏜️ Làm đất khô</button><button onClick={()=>addProblem('weeds')}>🌿 Tạo cỏ dại</button><button onClick={()=>addProblem('pests')}>🐛 Tạo sâu</button><button onClick={()=>s.spawnRandomEvent('golden-butterfly')}>🦋 Bướm vàng</button><button onClick={()=>s.spawnRandomEvent('tiny-chest')}>🎁 Rương quà</button><button onClick={s.ensureOrders}>🚚 Tạo đơn hàng</button><button onClick={()=>s.devSkipTime(60)}><FastForward/> +1 phút</button><button onClick={()=>s.devSkipTime(3600)}><FastForward/> +1 giờ</button><button className="danger" onClick={s.resetGame}>♻️ Reset game</button></div>}</aside>}
+function DevPanel(){const s=useGameStore();const [open,setOpen]=useState(false),plantSample=()=>{const plot=useGameStore.getState().plots.find(p=>p.isUnlocked&&!p.cropInstance);if(plot)try{useGameStore.getState().plantCrop(plot.id,'cabbage',true)}catch(e){toast.error(e instanceof Error?e.message:'Không thể trồng')}},addProblem=(kind:'weeds'|'pests'|'dry')=>useGameStore.setState(state=>({plots:state.plots.map(p=>p.cropInstance?{...p,cropInstance:{...p.cropInstance,care:{...(p.cropInstance.care??{water:50,weeds:false,pests:false}),...(kind==='dry'?{water:0}:kind==='weeds'?{weeds:true}:{pests:true})}}}:p)}));return <aside className={`dev-panel ${open?'open':''}`}><button className="dev-toggle" onClick={()=>setOpen(!open)}>🛠️ DEV</button>{open&&<div><b>Bảng kiểm thử</b><button onClick={s.devAddGold}><Coins/> +10.000 vàng</button><button onClick={s.devLevelUp}><Trophy/> Lên cấp</button><button onClick={plantSample}>🌱 Trồng cây mẫu</button><button onClick={s.devFinishCrops}><CheckCircle2/> Chín tất cả cây</button><button onClick={s.devUnlockAll}>🔓 Mở toàn bộ đất</button><button onClick={()=>useGameStore.setState(st=>({plots:st.plots.map((p,i)=>({...p,isUnlocked:i<3}))}))}>🔒 Khóa lại đất</button><button onClick={()=>s.refreshWeather('rain')}>🌧️ Bật mưa</button><button onClick={()=>s.refreshWeather('rainbow')}>🌈 Bật cầu vồng</button><button onClick={()=>addProblem('dry')}>🏜️ Làm đất khô</button><button onClick={()=>addProblem('weeds')}>🌿 Tạo cỏ dại</button><button onClick={()=>addProblem('pests')}>🐛 Tạo sâu</button><button onClick={()=>s.spawnRandomEvent('golden-butterfly')}>🦋 Bướm vàng</button><button onClick={()=>s.spawnRandomEvent('tiny-chest')}>🎁 Rương quà</button><button onClick={s.ensureOrders}>🚚 Tạo đơn hàng</button><button onClick={()=>s.devSkipTime(60)}><FastForward/> +1 phút</button><button onClick={()=>s.devSkipTime(3600)}><FastForward/> +1 giờ</button><button className="danger" onClick={s.resetGame}>♻️ Reset game</button></div>}</aside>}

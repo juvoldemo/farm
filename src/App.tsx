@@ -1,2 +1,4 @@
 import { FarmPage } from './pages/FarmPage'
-export default function App(){return <FarmPage/>}
+import { AuthScreen } from './components/AuthScreen'
+import { useAuth } from './contexts/AuthContext'
+export default function App(){const auth=useAuth();if(!auth.authReady)return <main className="auth-loading"><span>🌱</span><b>Đang tải nông trại...</b></main>;if(!auth.session)return <AuthScreen/>;if(auth.legacyImportRequired)return <main className="auth-gate"><section><h1>Phát hiện nông trại cũ</h1><p>Bạn muốn nhập dữ liệu đang lưu trên thiết bị này vào tài khoản vừa đăng nhập không? Lựa chọn này chỉ xuất hiện một lần.</p><div className="legacy-actions"><button className="primary" onClick={()=>void auth.resolveLegacyImport(true)}>Nhập dữ liệu cũ</button><button className="secondary" onClick={()=>void auth.resolveLegacyImport(false)}>Bắt đầu nông trại mới</button></div></section></main>;return <FarmPage/>}

@@ -1,0 +1,13 @@
+import type { GameStateData, SeedInstance } from '../types/game'
+import { normalizeCloudState } from './cloudSaveService'
+import { supabase } from './supabaseClient'
+
+const client=()=>{if(!supabase)throw new Error('Supabase chưa được cấu hình.');return supabase}
+export interface ServerHarvestResult {state:GameStateData;quantity:number;xp:number;quality:'normal'|'silver'|'gold';giantQuantity:number;hybridAttempted:boolean;hybridSeed:SeedInstance|null;hybridChance:number;pending:boolean}
+export const plantCropOnServer=async(plotIndex:number,cropId:string,seedInstanceId?:string)=>{const {data,error}=await client().rpc('plant_crop_v2',{p_plot_index:plotIndex,p_crop_id:cropId,p_seed_instance_id:seedInstanceId??null});if(error)throw error;const value=data as {state:unknown};return {...value,state:normalizeCloudState(value.state)}}
+export const harvestCropOnServer=async(plotIndex:number,requestId=crypto.randomUUID()):Promise<ServerHarvestResult>=>{const {data,error}=await client().rpc('harvest_crop_v2',{p_plot_index:plotIndex,p_request_id:requestId});if(error)throw error;const value=data as Omit<ServerHarvestResult,'state'>&{state:unknown};return {...value,state:normalizeCloudState(value.state)}}
+export const loadServerSeeds=async()=>{const {data,error}=await client().from('seed_instances').select('*').in('status',['inventory','pending']).order('created_at',{ascending:false});if(error)throw error;return data}
+export const loadHybridJournal=async()=>{const {data,error}=await client().from('player_hybrid_discoveries').select('*').order('discovered_at',{ascending:false});if(error)throw error;return data}
+export const buyGeneticSeedOnServer=async(cropId:string,requestId=crypto.randomUUID())=>{const {data,error}=await client().rpc('buy_genetic_seed',{p_crop_id:cropId,p_request_id:requestId});if(error)throw error;const value=data as {state:unknown;seed:unknown;cost:number};return {...value,state:normalizeCloudState(value.state)}}
+export const loadPendingSeedRewards=async()=>{const {data,error}=await client().from('pending_seed_rewards').select('id,created_at,seed_instances(id,crop_id,rarity,traits,generation,hybrid_id)').is('claimed_at',null).order('created_at',{ascending:true});if(error)throw error;return data as unknown as Array<{id:string;created_at:string;seed_instances:{id:string;crop_id:string;rarity:string;traits:unknown[];generation:number;hybrid_id:string|null}}>} 
+export const claimPendingSeed=async(rewardId:string)=>{const {data,error}=await client().rpc('claim_pending_seed',{p_reward_id:rewardId});if(error)throw error;const value=data as {state:unknown};return {...value,state:normalizeCloudState(value.state)}}

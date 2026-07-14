@@ -8,6 +8,7 @@ import { syncOfflineProgress } from '../src/services/storageService'
 import { getGameSnapshot, useGameStore } from '../src/store/gameStore'
 import { calculateHarvestYield } from '../src/utils/harvestYield'
 import { migrateSaveGame, validateSaveGame } from '../src/services/saveMigrationService'
+import { normalizeCloudState } from '../src/services/cloudSaveService'
 import { getCropEconomy } from '../src/utils/cropEconomy'
 
 const cabbage=crops[0]
@@ -32,13 +33,14 @@ describe('logic thời gian cây trồng',()=>{
 describe('giao dịch và tiến trình',()=>{
  beforeEach(()=>{localStorage.clear();useGameStore.getState().resetGame()})
  it('không mở đất khi thiếu vàng',()=>expect(()=>useGameStore.getState().unlockPlot('plot-4')).toThrow(/Không đủ vàng/))
- it('không mua hạt khi thiếu vàng',()=>{useGameStore.setState(s=>({player:{...s.player,level:3,gold:0}}));expect(()=>useGameStore.getState().buyItem('seed','corn')).toThrow(/Không đủ tiền/)})
+ it('không mua hạt khi thiếu vàng',()=>{useGameStore.setState(s=>({player:{...s.player,level:3,gold:0}}));expect(()=>useGameStore.getState().buyItem('seed','corn')).toThrow(/Không đủ vàng/)})
  it('không thu hoạch cây chưa chín',()=>{useGameStore.getState().plantCrop('plot-1','cabbage');expect(()=>useGameStore.getState().harvestCrop('plot-1')).toThrow(/chưa chín/)})
  it('thu hoạch cộng kho và XP trong phạm vi cấu hình',()=>{useGameStore.getState().plantCrop('plot-1','cabbage');useGameStore.getState().devFinishCrops();const reward=useGameStore.getState().harvestCrop('plot-1');expect(reward.quantity).toBeGreaterThanOrEqual(cabbage.minHarvestQuantity);expect(reward.quantity).toBeLessThanOrEqual(cabbage.maxHarvestQuantity+cabbage.maxBonusYield+5);expect(useGameStore.getState().player.currentXp).toBe(4);expect(useGameStore.getState().inventory.find(i=>i.itemType==='produce'&&i.referenceId==='cabbage')?.quantity).toBe(reward.quantity);expect(useGameStore.getState().harvestHistory).toHaveLength(1)})
  it('cộng XP có thể lên nhiều cấp',()=>{const value=calculatePlayerLevel(1,90,200);expect(value.level).toBe(3);expect(value.currentXp).toBe(30);expect(value.levelsGained).toBe(2)})
  it('đồng bộ offline chỉ báo cây chín, không tự thu hoạch',()=>{const state=useGameStore.getState();const planted=instance(Date.now()-120_000,Date.now()-60_000);const snapshot={...state,plots:state.plots.map((p,i)=>i===0?{...p,cropInstance:planted}:p),player:{...state.player,lastLoginAt:new Date(Date.now()-120_000).toISOString()}};const result=syncOfflineProgress(snapshot);expect(result.elapsedSeconds).toBeGreaterThanOrEqual(119);expect(result.readyCrops).toBe(1);expect(snapshot.plots[0].cropInstance).toBeDefined()})
  it('tạo snapshot cloud chỉ gồm dữ liệu game cần thiết',()=>{const snapshot=getGameSnapshot();expect(snapshot.plots).toHaveLength(24);expect(snapshot).not.toHaveProperty('plantCrop');expect(snapshot).not.toHaveProperty('timeOffsetMs')})
  it('khôi phục đầy đủ snapshot tải từ cloud',()=>{const snapshot=getGameSnapshot();const cloud={...snapshot,player:{...snapshot.player,gold:4321},tutorialStep:7};useGameStore.getState().replaceGameData(cloud);expect(useGameStore.getState().player.gold).toBe(4321);expect(useGameStore.getState().tutorialStep).toBe(7);expect(useGameStore.getState().plots).toHaveLength(24)})
+ it('cloud chấp nhận save hiện tại và migrate save cũ',()=>{const current=getGameSnapshot(),legacy={...current,version:1,currentWeather:undefined,player:{...current.player,diamonds:5}};expect(normalizeCloudState(current).version).toBe(5);const migrated=normalizeCloudState(legacy);expect(migrated.version).toBe(5);expect(migrated.player).not.toHaveProperty('diamonds')})
 })
 
 describe('sản lượng có seed',()=>{
@@ -54,6 +56,6 @@ describe('giá trị kinh tế cây trồng',()=>{
 
 describe('migrate và giao dịch đơn hàng',()=>{
  beforeEach(()=>{localStorage.clear();useGameStore.getState().resetGame()})
- it('nâng save v1 mà không mất vàng, cây và kho',()=>{const current=getGameSnapshot(),old={...current,version:1,orders:undefined,currentWeather:undefined,randomEventState:undefined,harvestHistory:undefined,player:{...current.player,gold:987,settings:{music:true,sound:true,reducedMotion:false}}};const migrated=migrateSaveGame(old);expect(migrated.version).toBe(3);expect(migrated.player.gold).toBe(987);expect(migrated.plots).toHaveLength(24);expect(migrated.inventory).toEqual(current.inventory);expect(migrated.player.settings.haptics).toBe(true);expect(validateSaveGame(migrated)).toBe(true)})
+ it('nâng save v1 mà không mất vàng, cây và kho',()=>{const current=getGameSnapshot(),old={...current,version:1,orders:undefined,currentWeather:undefined,randomEventState:undefined,harvestHistory:undefined,player:{...current.player,gold:987,settings:{music:true,sound:true,reducedMotion:false}}};const migrated=migrateSaveGame(old);expect(migrated.version).toBe(5);expect(migrated.player.gold).toBe(987);expect(migrated.plots).toHaveLength(24);expect(migrated.inventory).toEqual(current.inventory);expect(migrated.player.settings.haptics).toBe(true);expect(validateSaveGame(migrated)).toBe(true)})
  it('thiếu nông sản không trừ kho hay cộng thưởng',()=>{useGameStore.getState().ensureOrders();const before=getGameSnapshot(),order=before.orders[0];expect(()=>useGameStore.getState().deliverOrder(order.id)).toThrow(/Chưa đủ/);const after=getGameSnapshot();expect(after.inventory).toEqual(before.inventory);expect(after.player.gold).toBe(before.player.gold)})
 })

@@ -6,14 +6,15 @@ import { getCropGrowthState } from '../utils/cropGrowth'
 import { formatRemainingTime } from '../utils/time'
 import { formatNumber } from '../utils/currency'
 
-export function FarmPlotCard({plot,now,onClick,highlight=false}:{plot:FarmPlot;now:number;onClick:()=>void;highlight?:boolean}){
+export function FarmPlotCard({plot,now,onClick,highlight=false,readOnly=false}:{plot:FarmPlot;now:number;onClick?:()=>void;highlight?:boolean;readOnly?:boolean}){
  const crop=plot.cropInstance?cropById(plot.cropInstance.cropId):undefined
  const growth=plot.cropInstance&&crop?getCropGrowthState(plot.cropInstance,crop,now):undefined
- if(!plot.isUnlocked)return <motion.button whileTap={{scale:.95}} className={`plot locked ${highlight?'tutorial-highlight':''}`} onClick={onClick}><span className="plot-number">#{plot.plotNumber}</span><LockKeyhole size={26}/><b>{formatNumber(plot.unlockPrice)} 🪙</b><small>Cấp {plot.requiredLevel}</small></motion.button>
- if(!crop||!growth)return <motion.button whileHover={{y:-3}} whileTap={{scale:.94}} className={`plot empty ${highlight?'tutorial-highlight':''}`} onClick={onClick}><span className="plot-number">#{plot.plotNumber}</span><div className="soil-lines"/><Plus className="plot-plus"/><b>Trồng cây</b></motion.button>
- return <motion.button whileTap={{scale:.95}} className={`plot planted ${growth.isReadyToHarvest?'ready':''}`} onClick={onClick}>
+ if(!plot.isUnlocked)return <motion.button whileTap={readOnly?undefined:{scale:.95}} aria-disabled={readOnly} className={`plot locked ${readOnly?'visitor-plot':''} ${highlight?'tutorial-highlight':''}`} onClick={readOnly?undefined:onClick}><span className="plot-number">#{plot.plotNumber}</span><LockKeyhole size={26}/><b>{formatNumber(plot.unlockPrice)} 🪙</b><small>Cấp {plot.requiredLevel}</small></motion.button>
+ if(!crop||!growth)return <motion.button whileHover={readOnly?undefined:{y:-3}} whileTap={readOnly?undefined:{scale:.94}} aria-disabled={readOnly} className={`plot empty ${readOnly?'visitor-plot':''} ${highlight?'tutorial-highlight':''}`} onClick={readOnly?undefined:onClick}><span className="plot-number">#{plot.plotNumber}</span><div className="soil-lines"/>{!readOnly&&<Plus className="plot-plus"/>}<b>{readOnly?'Đất trống':'Trồng cây'}</b></motion.button>
+ return <motion.button whileTap={readOnly?undefined:{scale:.95}} aria-disabled={readOnly} className={`plot planted ${readOnly?'visitor-plot':''} ${growth.isReadyToHarvest?'ready':''}`} onClick={readOnly?undefined:onClick}>
   <span className="plot-number">#{plot.plotNumber}</span>{growth.isReadyToHarvest&&<Sparkles className="spark one"/>}<span className={`crop-stage ${growth.currentStage.animation??''}`} style={{transform:`scale(${growth.currentStage.scale??1})`}}>{growth.currentStage.icon}</span>
   {!growth.isReadyToHarvest&&<span className="care-flags">{(plot.cropInstance?.care?.water??50)<35?'💧':''}{plot.cropInstance?.care?.weeds?'🌿':''}{plot.cropInstance?.care?.pests?'🐛':''}</span>}
-  <b>{crop.name}</b>{growth.isReadyToHarvest?<span className="harvest-label"><ShoppingBasket size={14}/> Thu hoạch</span>:<><div className="crop-progress"><i style={{width:`${growth.growthPercent}%`}}/></div><small>{formatRemainingTime(growth.remainingSeconds)}</small></>}
+  {!!plot.cropInstance?.traits?.length&&<span className="plot-genetics" title="Cây có đặc tính">🧬</span>}
+  <b>{crop.name}</b>{growth.isReadyToHarvest?<span className="harvest-label"><ShoppingBasket size={14}/> {readOnly?'Đã chín':'Thu hoạch'}</span>:<><div className="crop-progress"><i style={{width:`${growth.growthPercent}%`}}/></div><small>{formatRemainingTime(growth.remainingSeconds)}</small></>}
  </motion.button>
 }

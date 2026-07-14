@@ -1,4 +1,5 @@
 import type { GameStateData } from '../types/game'
+import { migrateSaveGame, validateSaveGame } from './saveMigrationService'
 import { supabase } from './supabaseClient'
 
 interface CloudSaveRow {
@@ -9,19 +10,26 @@ interface CloudSaveRow {
   updated_at: string
 }
 
+export interface CloudGame {
+  state: GameStateData
+  updatedAt: string
+}
+
+export class CloudSaveConflictError extends Error {
+  constructor(){super('Bản lưu cloud đã được cập nhật trên một thiết bị khác.');this.name='CloudSaveConflictError'}
+}
+
 const requireClient = () => {
   if (!supabase) throw new Error('Supabase chưa được cấu hình.')
   return supabase
 }
 
-const validateState = (value: unknown): value is GameStateData => {
-  if (!value || typeof value !== 'object') return false
-  const state = value as Partial<GameStateData>
-  return state.version === 1 && Boolean(state.player) && Array.isArray(state.plots)
-    && state.plots.length === 24 && Array.isArray(state.inventory) && Boolean(state.stats)
+export const normalizeCloudState = (value: unknown): GameStateData => {
+  if(!validateSaveGame(value))throw new Error('Bản lưu cloud không hợp lệ hoặc không tương thích.')
+  return migrateSaveGame(value)
 }
 
-export const loadCloudGame = async (userId: string): Promise<GameStateData | null> => {
+export const loadCloudGame = async (userId: string): Promise<CloudGame | null> => {
   const { data, error } = await requireClient()
     .from('game_saves')
     .select('user_id,state,save_version,last_saved_at,updated_at')
@@ -29,17 +37,19 @@ export const loadCloudGame = async (userId: string): Promise<GameStateData | nul
     .maybeSingle<CloudSaveRow>()
   if (error) throw error
   if (!data) return null
-  if (!validateState(data.state)) throw new Error('Bản lưu cloud không hợp lệ hoặc không tương thích.')
-  return data.state
+  return {state:normalizeCloudState(data.state),updatedAt:data.updated_at}
 }
 
-export const saveCloudGame = async (userId: string, state: GameStateData): Promise<string> => {
+export const saveCloudGame = async (userId: string, state: GameStateData, expectedUpdatedAt?:string): Promise<string> => {
   const savedAt = new Date().toISOString()
-  const { data, error } = await requireClient()
-    .from('game_saves')
-    .upsert({ user_id:userId, state, save_version:state.version, last_saved_at:savedAt }, { onConflict:'user_id' })
-    .select('updated_at')
-    .single<{ updated_at:string }>()
+  const table=requireClient().from('game_saves')
+  const query=expectedUpdatedAt
+    ?table.update({state,save_version:state.version,last_saved_at:savedAt}).eq('user_id',userId).eq('updated_at',expectedUpdatedAt)
+    :table.upsert({user_id:userId,state,save_version:state.version,last_saved_at:savedAt},{onConflict:'user_id'})
+  const {data,error}=await query.select('updated_at').maybeSingle<{updated_at:string}>()
   if (error) throw error
+  if(!data)throw new CloudSaveConflictError()
+  const {error:profileError}=await requireClient().rpc('refresh_public_progress')
+  if(profileError&&import.meta.env.DEV)console.error('Không thể cập nhật hồ sơ công khai:',profileError)
   return data.updated_at
 }

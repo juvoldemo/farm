@@ -1,0 +1,9 @@
+.avatar>img{width:100%;height:100%;border-radius:inherit;object-fit:cover}
+.account-hero>span img{width:48px;height:48px;border-radius:14px;object-fit:cover}
+.account-hero em{display:block;font-size:9px;color:#748666;font-style:normal}
+.profile-code{display:flex;align-items:center;gap:8px;background:#f1f6e8;border-radius:12px;padding:8px}
+.profile-code span{font-size:9px;color:#7c8b70}.profile-code b{flex:1}.profile-code button{border:0;background:#dbeac9;border-radius:8px;padding:5px}.profile-code svg{width:14px}
+.profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}.profile-stats span{text-align:center;background:#fff7cf;border-radius:11px;padding:7px;font-size:8px}.profile-stats b{display:block;font-size:12px}
+.profile-field{font-size:9px;font-weight:800}.profile-field input{display:block;width:100%;margin-top:3px;padding:8px;border:1px solid #d5e3c5;border-radius:9px}
+.legacy-actions{display:grid;gap:9px;margin-top:16px}.legacy-actions button{padding:10px;border-radius:12px}
+.visitor-plot{cursor:default}
