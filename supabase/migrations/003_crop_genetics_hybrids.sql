@@ -18,7 +18,9 @@ create table if not exists public.trait_definitions (
  id text primary key, name text not null, icon text not null, values_by_level jsonb not null,
  description text not null, is_active boolean not null default true
 );
-insert into public.trait_definitions values
+insert into public.trait_definitions(
+ id,name,icon,values_by_level,description,is_active
+) values
 ('fast_growth','Lớn nhanh','⚡','[0.05,0.10,0.15]','Giảm thời gian sinh trưởng',true),
 ('high_yield','Sai quả','🧺','[0.05,0.10,0.20]','Tăng sản lượng',true),
 ('high_quality','Chất lượng cao','✨','[0.05,0.10,0.15]','Tăng chất lượng',true),
@@ -115,7 +117,7 @@ begin
 end $$;
 
 create or replace function public.plant_crop_v2(p_plot_index integer,p_crop_id text,p_seed_instance_id uuid default null) returns jsonb language plpgsql security definer set search_path=public as $$
-declare me uuid:=auth.uid();save_row game_saves%rowtype;plot jsonb;def crop_definitions%rowtype;seed seed_instances%rowtype;traits jsonb:='[]';rarity text:='common';generation integer:=0;hybrid text;duration integer;fast numeric;now_at timestamptz:=now();crop_uuid uuid:=gen_random_uuid();instance jsonb;qty integer;state jsonb;special_json jsonb;
+declare me uuid:=auth.uid();save_row game_saves%rowtype;plot jsonb;def crop_definitions%rowtype;seed seed_instances%rowtype;traits jsonb:='[]';rarity text:='common';generation integer:=0;hybrid text;duration integer;fast numeric;now_at timestamptz:=now();crop_uuid uuid:=gen_random_uuid();instance jsonb;qty integer;state jsonb;persisted_state jsonb;special_json jsonb;
 begin
  if me is null then raise exception 'AUTH_REQUIRED';end if;if p_plot_index not between 1 and 24 then raise exception 'PLOT_INVALID';end if;
  select * into save_row from game_saves where user_id=me for update;if save_row.user_id is null then raise exception 'SAVE_NOT_FOUND';end if;
@@ -128,17 +130,49 @@ begin
  fast:=genetic_trait_value(traits,'fast_growth');duration:=greatest(def.min_growth_seconds,round(def.base_growth_seconds*(1-fast))::integer);
  instance:=jsonb_build_object('id',crop_uuid::text,'cropId',p_crop_id,'plotId',plot->>'id','plantedAt',now_at,'readyAt',now_at+make_interval(secs=>duration),'baseGrowthDuration',def.base_growth_seconds,'calculatedGrowthDuration',duration,'totalReductionSeconds',def.base_growth_seconds-duration,'fertilizerUsage','[]'::jsonb,'lastCalculatedAt',now_at,'plantedSeedInstanceId',p_seed_instance_id,'rarity',rarity,'traits',traits,'weatherEffects',jsonb_build_object('rainExperienced',false),'source',coalesce(seed.source,'shop'),'parentSeedIds',coalesce(to_jsonb(seed.parent_seed_ids),'[]'),'generation',generation,'hybridId',hybrid,'care',jsonb_build_object('water',50,'weeds',false,'pests',false));
  plot:=jsonb_set(plot,'{cropInstance}',instance,true);state:=jsonb_set(state,array['plots',(p_plot_index-1)::text],plot);state:=jsonb_set(state,'{stats,planted}',to_jsonb(coalesce((state->'stats'->>'planted')::integer,0)+1));state:=jsonb_set(state,'{lastSavedAt}',to_jsonb(now_at::text));
- update game_saves set state=plant_crop_v2.state,save_version=greatest(save_version,5) where user_id=me;
+ persisted_state:=state;
+ update game_saves set state=persisted_state,save_version=greatest(save_version,5) where user_id=me;
  update player_crops set status='harvested',updated_at=now_at where owner_id=me and plot_index=p_plot_index and status in('growing','ready','harvesting');insert into player_crops(id,owner_id,plot_index,crop_id,seed_instance_id,rarity,traits,generation,hybrid_id,planted_at,ready_at,calculated_growth_seconds,care_data,weather_data) values(crop_uuid,me,p_plot_index,p_crop_id,p_seed_instance_id,rarity,traits,generation,hybrid,now_at,now_at+make_interval(secs=>duration),duration,instance->'care',instance->'weatherEffects');
  return jsonb_build_object('state',state,'cropInstance',instance);
 end $$;
 
 create or replace function public.harvest_crop_v2(p_plot_index integer,p_request_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
-declare me uuid:=auth.uid();existing jsonb;save_row game_saves%rowtype;pc player_crops%rowtype;def crop_definitions%rowtype;mate player_crops%rowtype;recipe hybrid_recipes%rowtype;base_qty integer;final_qty integer;bonus numeric;quality text:='normal';giant integer:=0;chance numeric:=0;hybrid_seed seed_instances%rowtype;returned_seed seed_instances%rowtype;new_traits jsonb:='[]';new_generation integer;new_rarity text;state jsonb;plot jsonb;result jsonb;total_items integer;seed_status text:='inventory';returned_status text:='inventory';trait jsonb;mutation_id text;
+declare me uuid:=auth.uid();existing jsonb;save_row game_saves%rowtype;pc player_crops%rowtype;def crop_definitions%rowtype;mate player_crops%rowtype;recipe hybrid_recipes%rowtype;base_qty integer;final_qty integer;bonus numeric;quality text:='normal';giant integer:=0;chance numeric:=0;hybrid_seed seed_instances%rowtype;returned_seed seed_instances%rowtype;new_traits jsonb:='[]';new_generation integer;new_rarity text;state jsonb;persisted_state jsonb;plot jsonb;result jsonb;total_items integer;seed_status text:='inventory';returned_status text:='inventory';trait jsonb;mutation_id text;
 begin
  if me is null then raise exception 'AUTH_REQUIRED';end if;select h.result into existing from harvest_logs h where h.owner_id=me and h.request_id=p_request_id;if existing is not null then return existing;end if;
- select * into save_row from game_saves where user_id=me for update;select * into pc from player_crops where owner_id=me and plot_index=p_plot_index and status in('growing','ready') for update;
- if pc.id is null then raise exception 'CROP_NOT_FOUND';end if;plot:=save_row.state->'plots'->(p_plot_index-1);if plot->'cropInstance' is null then raise exception 'CROP_NOT_FOUND';end if;
+ select * into save_row from game_saves where user_id=me for update;
+ if save_row.user_id is null then raise exception 'SAVE_NOT_FOUND';end if;
+ plot:=save_row.state->'plots'->(p_plot_index-1);
+ if plot->'cropInstance' is null then raise exception 'CROP_NOT_FOUND';end if;
+
+ -- Cây được trồng trước migration 003 có thể chỉ tồn tại trong game_saves.
+ -- Tự tạo bản ghi chuẩn hóa để người chơi vẫn thu hoạch được cây cũ.
+ select * into pc
+ from player_crops
+ where owner_id=me and plot_index=p_plot_index and status in('growing','ready','harvesting')
+ for update;
+ if pc.id is null then
+  insert into player_crops(
+   owner_id,plot_index,crop_id,rarity,traits,generation,hybrid_id,
+   planted_at,ready_at,calculated_growth_seconds,care_data,weather_data,status
+  )
+  select
+   me,p_plot_index,crop->>'cropId',coalesce(crop->>'rarity','common'),
+   coalesce(crop->'traits','[]'::jsonb),coalesce((crop->>'generation')::integer,0),crop->>'hybridId',
+   (crop->>'plantedAt')::timestamptz,(crop->>'readyAt')::timestamptz,
+   greatest(1,coalesce((crop->>'calculatedGrowthDuration')::integer,(crop->>'baseGrowthDuration')::integer,1)),
+   coalesce(crop->'care','{}'::jsonb),coalesce(crop->'weatherEffects','{}'::jsonb),
+   case when (crop->>'readyAt')::timestamptz<=now() then 'ready' else 'growing' end
+  from (select plot->'cropInstance' as crop) legacy
+  where exists(select 1 from crop_definitions d where d.id=crop->>'cropId')
+  on conflict(owner_id,plot_index) where status in('growing','ready','harvesting') do nothing;
+
+  select * into pc
+  from player_crops
+  where owner_id=me and plot_index=p_plot_index and status in('growing','ready','harvesting')
+  for update;
+ end if;
+ if pc.id is null then raise exception 'CROP_NOT_FOUND';end if;
  pc.ready_at:=(plot->'cropInstance'->>'readyAt')::timestamptz;pc.traits:=coalesce(plot->'cropInstance'->'traits','[]');pc.care_data:=coalesce(plot->'cropInstance'->'care','{}');pc.weather_data:=coalesce(plot->'cropInstance'->'weatherEffects','{}');
  if pc.ready_at>now() then raise exception 'CROP_NOT_READY';end if;update player_crops set status='harvesting',harvest_token=p_request_id,ready_at=pc.ready_at,traits=pc.traits,care_data=pc.care_data,weather_data=pc.weather_data where id=pc.id;
  select * into def from crop_definitions where id=pc.crop_id;base_qty:=floor(random()*(def.max_yield-def.min_yield+1)+def.min_yield);bonus:=least(1,genetic_trait_value(pc.traits,'high_yield')+case when coalesce((pc.weather_data->>'rainExperienced')::boolean,false) then genetic_trait_value(pc.traits,'rain_loving') else 0 end);final_qty:=greatest(1,round(base_qty*(1+bonus)));
@@ -287,7 +321,8 @@ begin
    from player_hybrid_discoveries d where d.owner_id=me
   ),'[]'),true
  );
- update game_saves set state=harvest_crop_v2.state,save_version=greatest(save_version,5) where user_id=me;
+ persisted_state:=state;
+ update game_saves set state=persisted_state,save_version=greatest(save_version,5) where user_id=me;
  update player_crops set status='harvested',updated_at=now() where id=pc.id;
  if pc.seed_instance_id is not null then
   update seed_instances set status='consumed',updated_at=now() where id=pc.seed_instance_id;
@@ -306,7 +341,7 @@ begin
 end $$;
 
 create or replace function public.buy_genetic_seed(p_crop_id text,p_request_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
-declare me uuid:=auth.uid();save_row game_saves%rowtype;def crop_definitions%rowtype;seed seed_instances%rowtype;rarity text;roll numeric:=random();trait_count integer;max_level integer;traits jsonb;cost integer;state jsonb;
+declare me uuid:=auth.uid();save_row game_saves%rowtype;def crop_definitions%rowtype;seed seed_instances%rowtype;rarity text;roll numeric:=random();trait_count integer;max_level integer;traits jsonb;cost integer;state jsonb;persisted_state jsonb;
 begin
  if me is null then
   raise exception 'AUTH_REQUIRED';
@@ -347,12 +382,13 @@ begin
   'parentSeedIds','[]'::jsonb,'generation',0,'status','inventory','createdAt',seed.created_at,'updatedAt',seed.updated_at
  )));
  state:=jsonb_set(state,'{lastSavedAt}',to_jsonb(now()::text));
- update game_saves set state=buy_genetic_seed.state,save_version=greatest(save_version,5) where user_id=me;
+ persisted_state:=state;
+ update game_saves set state=persisted_state,save_version=greatest(save_version,5) where user_id=me;
  return jsonb_build_object('state',state,'seed',to_jsonb(seed),'cost',cost);
 end $$;
 
 create or replace function public.claim_pending_seed(p_reward_id uuid) returns jsonb language plpgsql security definer set search_path=public as $$
-declare me uuid:=auth.uid();reward pending_seed_rewards%rowtype;seed seed_instances%rowtype;save_row game_saves%rowtype;total_items integer;state jsonb;
+declare me uuid:=auth.uid();reward pending_seed_rewards%rowtype;seed seed_instances%rowtype;save_row game_saves%rowtype;total_items integer;state jsonb;persisted_state jsonb;
 begin
  if me is null then
   raise exception 'AUTH_REQUIRED';
@@ -387,7 +423,8 @@ begin
   'status','inventory','createdAt',seed.created_at,'updatedAt',now()
  )));
  state:=jsonb_set(state,'{lastSavedAt}',to_jsonb(now()::text));
- update game_saves set state=claim_pending_seed.state where user_id=me;
+ persisted_state:=state;
+ update game_saves set state=persisted_state where user_id=me;
  return jsonb_build_object('state',state,'seed',to_jsonb(seed));
 end $$;
 
