@@ -25,6 +25,7 @@ export interface GrowthStageConfig {
 export interface CropDefinition {
   id: string; name: string; icon: string; description: string; seedPrice: number; sellPrice: number
   growthDurationSeconds: number; requiredLevel: number; harvestQuantityMin: number; harvestQuantityMax: number
+  bonusYieldMin: number; bonusYieldMax: number; economyTier: import('../config/economyConfig').EconomyTier
   baseHarvestQuantity: number; minHarvestQuantity: number; maxHarvestQuantity: number
   bonusYieldChance: number; maxBonusYield: number; perfectHarvestChance?: number; perfectHarvestMultiplier?: number; careYieldBonusPercent?: number
   xpReward: number; rarity: Rarity; repeatableHarvest: boolean; regrowDurationSeconds?: number

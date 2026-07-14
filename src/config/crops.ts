@@ -1,6 +1,7 @@
 import type { CropDefinition, GrowthStageConfig } from '../types/game'
+import { cropBalance } from './economyConfig'
 
-export const GROWTH_TIME_MULTIPLIER = 20
+export const GROWTH_TIME_MULTIPLIER = 1
 const growthDuration = (baseSeconds: number) => baseSeconds * GROWTH_TIME_MULTIPLIER
 
 const stages = (icons: [string,string,string,string,string]): GrowthStageConfig[] => [
@@ -13,7 +14,7 @@ const stages = (icons: [string,string,string,string,string]): GrowthStageConfig[
 const commonStages = (fruit: string) => stages(['🫘','🌱','🌿','🪴',fruit])
 const balance=(base:number,min:number,max:number,bonusYieldChance=.25,maxBonusYield=2)=>({baseHarvestQuantity:base,minHarvestQuantity:min,maxHarvestQuantity:max,bonusYieldChance,maxBonusYield,perfectHarvestChance:.04,perfectHarvestMultiplier:1.5,careYieldBonusPercent:18})
 
-export const crops: CropDefinition[] = [
+const legacyCrops = [
   {id:'cabbage',name:'Cải xanh',icon:'🥬',description:'Rau xanh giòn ngọt, lớn rất nhanh.',seedPrice:10,sellPrice:6,growthDurationSeconds:growthDuration(60),requiredLevel:1,harvestQuantityMin:3,harvestQuantityMax:7,baseHarvestQuantity:4,minHarvestQuantity:3,maxHarvestQuantity:7,bonusYieldChance:.35,maxBonusYield:3,perfectHarvestChance:.05,perfectHarvestMultiplier:1.5,careYieldBonusPercent:20,xpReward:4,rarity:'common',repeatableHarvest:false,growthStages:commonStages('🥬')},
   {id:'carrot',name:'Cà rốt',icon:'🥕',description:'Củ cam ngọt lành cho nông trại mới.',seedPrice:25,sellPrice:9,growthDurationSeconds:growthDuration(180),requiredLevel:2,harvestQuantityMin:3,harvestQuantityMax:7,baseHarvestQuantity:4,minHarvestQuantity:3,maxHarvestQuantity:7,bonusYieldChance:.3,maxBonusYield:2,perfectHarvestChance:.045,perfectHarvestMultiplier:1.5,careYieldBonusPercent:18,xpReward:8,rarity:'common',repeatableHarvest:false,growthStages:commonStages('🥕')},
   {id:'corn',name:'Ngô',icon:'🌽',description:'Bắp vàng óng dưới nắng.',seedPrice:60,sellPrice:18,growthDurationSeconds:growthDuration(600),requiredLevel:3,harvestQuantityMin:4,harvestQuantityMax:8,...balance(5,4,8),xpReward:18,rarity:'common',repeatableHarvest:false,growthStages:commonStages('🌽')},
@@ -26,5 +27,7 @@ export const crops: CropDefinition[] = [
   {id:'pepper',name:'Ớt chuông',icon:'🫑',description:'Ớt giòn rực rỡ sắc màu.',seedPrice:2200,sellPrice:520,growthDurationSeconds:growthDuration(43200),requiredLevel:15,harvestQuantityMin:6,harvestQuantityMax:11,...balance(8,6,11,.2,3),xpReward:310,rarity:'rare',repeatableHarvest:false,growthStages:commonStages('🫑')},
   {id:'pineapple',name:'Dứa',icon:'🍍',description:'Trái nhiệt đới thơm ngọt.',seedPrice:3800,sellPrice:1200,growthDurationSeconds:growthDuration(64800),requiredLevel:18,harvestQuantityMin:3,harvestQuantityMax:7,...balance(5,3,7,.18,2),xpReward:480,rarity:'rare',repeatableHarvest:false,growthStages:commonStages('🍍')},
   {id:'dragonfruit',name:'Thanh long',icon:'🐉',description:'Nông sản cao cấp của vùng nắng ấm.',seedPrice:7000,sellPrice:2300,growthDurationSeconds:growthDuration(86400),requiredLevel:20,harvestQuantityMin:3,harvestQuantityMax:7,...balance(5,3,7,.16,2),xpReward:750,rarity:'epic',repeatableHarvest:false,growthStages:commonStages('🌺')},
-]
+] satisfies Omit<CropDefinition,'bonusYieldMin'|'bonusYieldMax'|'economyTier'>[]
+
+export const crops:CropDefinition[]=legacyCrops.map(crop=>{const value=cropBalance[crop.id];if(!value)throw new Error(`Missing economy config for ${crop.id}`);return {...crop,seedPrice:value.seedPrice,sellPrice:value.sellPricePerUnit,growthDurationSeconds:value.growthTimeSeconds,requiredLevel:value.unlockLevel,harvestQuantityMin:value.baseYieldMin,harvestQuantityMax:value.baseYieldMax,baseHarvestQuantity:Math.round((value.baseYieldMin+value.baseYieldMax)/2),minHarvestQuantity:value.baseYieldMin,maxHarvestQuantity:value.baseYieldMax,bonusYieldMin:value.bonusYieldMin,bonusYieldMax:value.bonusYieldMax,bonusYieldChance:value.bonusYieldChance,maxBonusYield:value.bonusYieldMax,economyTier:value.economyTier}})
 export const cropById = (id: string) => crops.find(c => c.id === id)

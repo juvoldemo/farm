@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CheckCircle2, ChevronRight, Clock, Coins, CloudSun, FastForward, Sparkles, Sprout, Trophy, Users } from 'lucide-react'
 import { Toaster, toast } from 'sonner'
@@ -6,7 +6,7 @@ import { useGameStore } from '../store/gameStore'
 import type { FarmPlot } from '../types/game'
 import { useGameClock } from '../hooks/useGameClock'
 import { TopBar } from '../components/TopBar'
-import { FarmPlotCard } from '../components/FarmPlotCard'
+import { FarmPlotCard, type HarvestFeedback } from '../components/FarmPlotCard'
 import { BottomNav } from '../components/BottomNav'
 import { CropPanel, DailyPanel, InventoryPanel, MissionsPanel, SeedPicker, SettingsPanel, ShopPanel, UnlockPanel } from '../components/GamePanels'
 import { Modal } from '../components/Modal'
@@ -17,7 +17,7 @@ import { WeatherEffects } from '../components/farm/WeatherEffects'
 import { FarmCharacter } from '../components/farm/FarmCharacter'
 import { RandomFarmEvent } from '../components/farm/RandomFarmEvent'
 import { OrderBoard } from '../components/farm/OrderBoard'
-import { useFarmCharacter } from '../hooks/useFarmCharacter'
+import { animateFarmer, useFarmCharacter } from '../hooks/useFarmCharacter'
 import { randomChance } from '../utils/random'
 import { randomEvents } from '../config/randomEvents'
 import { VillageDevTools, VillagePage } from '../components/village/VillagePage'
@@ -29,6 +29,13 @@ import { useAuth } from '../contexts/AuthContext'
 import { loadNotifications } from '../services/notificationService'
 import { supabase } from '../services/supabaseClient'
 import { HybridJournalPanel } from '../components/GeneticsPanels'
+import { EconomyDebugLauncher } from '../components/EconomyDebugPanel'
+import { HarvestInteractionCoordinator, withHarvestTimeout } from '../services/harvestInteractionService'
+import { harvestCropOnServer } from '../services/geneticsApi'
+import { cropById } from '../config/crops'
+import { getCropRemainingTime } from '../utils/cropGrowth'
+import { SoundManager } from '../services/soundService'
+import { triggerHapticFeedback } from '../utils/haptics'
 
 type Panel = null|'shop-seed'|'shop-fertilizer'|'inventory'|'genetics'|'missions'|'settings'|'daily'|'account'|'friends'|'notifications'
 const tutorial=[
@@ -45,14 +52,28 @@ export function FarmPage(){
  const auth=useAuth()
  const {plots,player,stats,timeOffsetMs,tutorialStep,setTutorialStep,markLogin,currentWeather,refreshWeather,ensureOrders,spawnRandomEvent}=useGameStore()
  const character=useFarmCharacter()
- const now=useGameClock(timeOffsetMs),[view,setView]=useState<'farm'|'village'>(()=>new URLSearchParams(window.location.search).get('view')==='village'?'village':'farm'),[selected,setSelected]=useState<FarmPlot>(),[mode,setMode]=useState<'seed'|'crop'|'unlock'>(),[panel,setPanel]=useState<Panel>(null),[offline,setOffline]=useState<{seconds:number;ready:number}|null>(null),[friendFarm,setFriendFarm]=useState<FriendFarm|null>(null),[unread,setUnread]=useState(0)
+ const now=useGameClock(timeOffsetMs),[view,setView]=useState<'farm'|'village'>(()=>new URLSearchParams(window.location.search).get('view')==='village'?'village':'farm'),[selected,setSelected]=useState<FarmPlot>(),[mode,setMode]=useState<'seed'|'crop'|'unlock'>(),[panel,setPanel]=useState<Panel>(null),[offline,setOffline]=useState<{seconds:number;ready:number}|null>(null),[friendFarm,setFriendFarm]=useState<FriendFarm|null>(null),[unread,setUnread]=useState(0),[harvestFeedbacks,setHarvestFeedbacks]=useState<Record<string,HarvestFeedback>>({})
  const initialized=useRef(false)
+ const harvestCoordinator=useRef(new HarvestInteractionCoordinator()),rewardTimers=useRef(new Map<string,number>())
  useEffect(()=>{if(initialized.current)return;initialized.current=true;const saved=new Date(player.lastLoginAt).getTime(),seconds=Math.max(0,Math.floor((Date.now()-saved)/1000)),ready=plots.filter(p=>p.cropInstance&&new Date(p.cropInstance.readyAt).getTime()<=Date.now()+timeOffsetMs).length;if(seconds>=60)setOffline({seconds,ready});markLogin()},[])
  useEffect(()=>{refreshWeather();ensureOrders();const id=window.setInterval(()=>refreshWeather(),30_000);return()=>clearInterval(id)},[refreshWeather,ensureOrders])
  useEffect(()=>{const id=window.setInterval(()=>{const s=useGameStore.getState(),expired=!s.randomEventState.expiresAt||new Date(s.randomEventState.expiresAt).getTime()<Date.now(),today=new Date().toISOString().slice(0,10),claimed=s.randomEventState.dayKey===today?s.randomEventState.claimedToday:0,last=s.randomEventState.lastEventAt?new Date(s.randomEventState.lastEventAt).getTime():0;const event=randomEvents.find(item=>s.player.level>=item.minLevel&&claimed<item.dailyLimit&&Date.now()-last>=item.cooldownMinutes*60_000&&randomChance(item.spawnChance));if((!s.randomEventState.activeEventId||expired)&&event)spawnRandomEvent(event.id)},30_000);return()=>clearInterval(id)},[spawnRandomEvent])
  useEffect(()=>{const client=supabase;if(!auth.session||!client)return;const refresh=()=>void loadNotifications().then(items=>setUnread(items.filter(item=>!item.isRead).length));refresh();const channel=client.channel(`notifications:${auth.session.user.id}`).on('postgres_changes',{event:'*',schema:'public',table:'notifications',filter:`user_id=eq.${auth.session.user.id}`},refresh).subscribe();return()=>{void client.removeChannel(channel)}},[auth.session])
  const ready=useMemo(()=>plots.filter(p=>p.cropInstance&&new Date(p.cropInstance.readyAt).getTime()<=now).length,[plots,now])
- const handlePlot=(plot:FarmPlot)=>{setSelected(plot);setMode(!plot.isUnlocked?'unlock':plot.cropInstance?'crop':'seed')}
+ const clearHarvestFeedback=useCallback((plotId:string,delay=0)=>{window.clearTimeout(rewardTimers.current.get(plotId));const remove=()=>{setHarvestFeedbacks(current=>{if(!current[plotId])return current;const next={...current};delete next[plotId];return next});rewardTimers.current.delete(plotId)};if(delay)rewardTimers.current.set(plotId,window.setTimeout(remove,delay));else remove()},[])
+ useEffect(()=>()=>{rewardTimers.current.forEach(timer=>window.clearTimeout(timer));rewardTimers.current.clear()},[])
+ const handlePlot=useCallback((plot:FarmPlot)=>{
+  if(!plot.isUnlocked||!plot.cropInstance){setSelected(plot);setMode(!plot.isUnlocked?'unlock':'seed');return}
+  const crop=cropById(plot.cropInstance.cropId),currentNow=Date.now()+useGameStore.getState().timeOffsetMs
+  if(!crop||getCropRemainingTime(plot.cropInstance,currentNow)>0){setSelected(plot);setMode('crop');return}
+  const predicted=Math.round((crop.minHarvestQuantity+crop.maxHarvestQuantity)/2),clickedAt=performance.now();let activeRequestId=''
+  void harvestCoordinator.current.run({plotId:plot.id,
+   onStart:requestId=>{activeRequestId=requestId;setHarvestFeedbacks(current=>({...current,[plot.id]:{quantity:predicted,cropName:crop.name,phase:'harvesting'}}));const settings=useGameStore.getState().player.settings;SoundManager.play('harvest',settings.sound,settings.volume*.7);triggerHapticFeedback('light',settings.haptics);animateFarmer('harvest',plot.plotNumber);if(import.meta.env.DEV)console.debug('[harvest] optimistic-start',{plotId:plot.id,requestId,latencyMs:Math.round(performance.now()-clickedAt)})},
+   request:async requestId=>{if(auth.configured){const response=await withHarvestTimeout(harvestCropOnServer(plot.plotNumber,requestId));useGameStore.getState().applyServerHarvestState(response.state,plot.id,crop.id);return{quantity:response.quantity,xp:response.xp,lucky:!!response.hybridSeed||response.giantQuantity>0}}const result=useGameStore.getState().harvestCrop(plot.id);return{quantity:result.quantity,xp:result.xp,lucky:result.yield.isLuckyHarvest||result.yield.isPerfectHarvest||!!result.genetics.hybridSeed}},
+   onSuccess:result=>{setHarvestFeedbacks(current=>({...current,[plot.id]:{quantity:result.quantity,cropName:crop.name,phase:'confirmed'}}));if(result.lucky)SoundManager.play('lucky',useGameStore.getState().player.settings.sound,useGameStore.getState().player.settings.volume*.7);if(import.meta.env.DEV)console.debug('[harvest] confirmed',{plotId:plot.id,requestId:activeRequestId,totalMs:Math.round(performance.now()-clickedAt)});clearHarvestFeedback(plot.id,800)},
+   onRollback:()=>{clearHarvestFeedback(plot.id);if(auth.configured)void auth.syncNow();toast.error('Thu hoạch chưa thành công, vui lòng thử lại.')},
+  })
+ },[auth.configured,auth.syncNow,clearHarvestFeedback])
  const closePlot=()=>{setSelected(undefined);setMode(undefined)}
  const nav=(id:string)=>{if(id==='shop')setPanel('shop-seed');else if(id==='genetics')setPanel('genetics');else if(id==='fertilizer')setPanel('shop-fertilizer');else if(id==='inventory')setPanel('inventory');else if(id==='missions')setPanel('missions');else toast.info(id==='friends'?'Bạn bè sẽ mở trong bản cập nhật xã hội.':id==='decor'?'Trang trí đang được chuẩn bị.':'Bản đồ vùng đất mới sắp mở!')}
  const hour=new Date(now).getHours(),dayPhase=hour>=5&&hour<9?'dawn':hour>=9&&hour<17?'day':hour>=17&&hour<19?'sunset':'night'
@@ -63,7 +84,7 @@ export function FarmPage(){
   {view==='farm'?friendFarm?<FriendFarmView farm={friendFarm} onBack={()=>setFriendFarm(null)}/>:<><div className="farm-shortcuts"><button className="village-path" onClick={()=>setView('village')}><Users/> Sang Xóm nhỏ <ChevronRight/></button></div><main className="farm-layout">
    <section className="farm-board">
     <div className="farm-title"><div className="season"><span>🌻</span><div><small>Mùa hiện tại</small><b>Mùa nắng</b></div></div></div>
-    <div className="farm-grid" aria-label="24 luống đất">{plots.map(plot=><FarmPlotCard key={plot.id} plot={plot} now={now} onClick={()=>handlePlot(plot)} highlight={tutorialStep===0&&plot.plotNumber===1}/>)}</div>
+    <div className="farm-grid" aria-label="24 luống đất">{plots.map(plot=><FarmPlotCard key={plot.id} plot={plot} now={now} onClick={handlePlot} harvestFeedback={harvestFeedbacks[plot.id]} highlight={tutorialStep===0&&plot.plotNumber===1}/>)}</div>
     <FarmCharacter action={character.action} target={character.target}/><RandomFarmEvent/>
     <div className="farm-tip"><Sparkles/> Mẹo: cây vẫn tiếp tục lớn khi bạn rời nông trại.</div>
    </section>
@@ -82,7 +103,7 @@ export function FarmPage(){
   <FriendsPanel open={panel==='friends'} onClose={()=>setPanel(null)} onVisit={setFriendFarm}/><NotificationsPanel open={panel==='notifications'} onClose={()=>setPanel(null)} onCount={setUnread}/>
   <Modal open={!!offline} title="Trong lúc bạn vắng mặt" onClose={()=>setOffline(null)}><div className="offline"><Clock/><h3>Thời gian trôi thật nhanh!</h3><p>Bạn đã rời nông trại <b>{offline&&formatRemainingTime(offline.seconds)}</b>.</p><div><Sprout/> {offline?.ready?`${offline.ready} cây đã chín và đang chờ bạn.`:'Cây trồng vẫn tiếp tục lớn khỏe.'}</div><button className="primary" onClick={()=>setOffline(null)}>Về nông trại</button></div></Modal>
   <AnimatePresence>{tutorialStep<tutorial.length&&<motion.aside className="tutorial-card" initial={{y:30,opacity:0}} animate={{y:0,opacity:1}} exit={{opacity:0}}><div className="guide-avatar">👩‍🌾</div><div><small>HƯỚNG DẪN · {tutorialStep+1}/{tutorial.length}</small><b>{tutorial[tutorialStep]}</b><div className="tutorial-actions"><button onClick={()=>setTutorialStep(tutorial.length)}>Bỏ qua</button><button onClick={()=>setTutorialStep(tutorialStep+1)}>{tutorialStep===tutorial.length-1?'Hoàn tất':'Tiếp tục'} <ChevronRight/></button></div></div></motion.aside>}</AnimatePresence>
-  {import.meta.env.DEV&&<DevPanel/>}
+  {import.meta.env.DEV&&<><EconomyDebugLauncher/><DevPanel/></>}
  </div>
 }
 

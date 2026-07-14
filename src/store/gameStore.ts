@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { crops, cropById } from '../config/crops'
 import { fertilizerById } from '../config/fertilizers'
 import { plotUnlockConfig } from '../config/plotUnlockConfig'
+import { INITIAL_UNLOCKED_PLOTS, STARTING_COINS } from '../config/economyConfig'
 import type { FarmPlot, GameStateData, HarvestGeneticsResult, InventoryItem, ItemType, Player, SeedInstance, Stats } from '../types/game'
 import { applyFertilizer as applyFertilizerToCrop, getCropRemainingTime } from '../utils/cropGrowth'
 import { calculatePlayerLevel } from '../utils/level'
@@ -30,17 +31,20 @@ const initialInventory: InventoryItem[] = [
   {id:itemId('seed','carrot'),itemType:'seed',referenceId:'carrot',quantity:5},
   {id:itemId('fertilizer','small'),itemType:'fertilizer',referenceId:'small',quantity:2},
 ]
-const initialPlots = (): FarmPlot[] => plotUnlockConfig.map(p => ({id:`plot-${p.plotNumber}`,plotNumber:p.plotNumber,isUnlocked:p.plotNumber<=3,unlockPrice:p.price,requiredLevel:p.requiredLevel}))
-const initialPlayer = (): Player => ({id:'local-player',name:'Bé Nông Dân',level:1,currentXp:0,gold:300,energy:20,inventoryCapacity:100,createdAt:new Date().toISOString(),lastLoginAt:new Date().toISOString(),settings:{music:true,sound:true,reducedMotion:false,haptics:true,volume:.55}})
+const initialPlots = (): FarmPlot[] => plotUnlockConfig.map(p => ({id:`plot-${p.plotNumber}`,plotNumber:p.plotNumber,isUnlocked:p.plotNumber<=INITIAL_UNLOCKED_PLOTS,unlockPrice:p.price,requiredLevel:p.requiredLevel}))
+const initialPlayer = (): Player => ({id:'local-player',name:'Bé Nông Dân',level:1,currentXp:0,gold:STARTING_COINS,energy:20,inventoryCapacity:100,createdAt:new Date().toISOString(),lastLoginAt:new Date().toISOString(),settings:{music:true,sound:true,reducedMotion:false,haptics:true,volume:.55}})
 const initialStats = (): Stats => ({planted:0,harvested:0,sold:0,fertilizersUsed:0,plotsUnlocked:0})
 const initialWeather=():WeatherState=>({id:'sunny',startedAt:new Date().toISOString(),endsAt:new Date(Date.now()+20*60_000).toISOString(),seed:Date.now()})
 const initialEvent=():RandomEventState=>({claimedToday:0,dayKey:new Date().toISOString().slice(0,10)})
 const initialNpcData=(now=Date.now(),weather:WeatherState['id']='sunny')=>({npcStates:Object.fromEntries(npcs.map(npc=>[npc.id,getNpcStateAtTime(npc.id,now,weather)])) as Record<string,NpcRuntimeState>,npcRelationships:Object.fromEntries(npcs.map(npc=>[npc.id,createRelationship(npc.id)])) as Record<string,NpcRelationship>,npcShopStates:Object.fromEntries(npcs.filter(npc=>npc.shopId).map(npc=>[npc.shopId!,createNpcShopState(npc.shopId!,now)])) as Record<string,NpcShopState>,npcFarmStates:{ba:createNpcFarmState(now)} as Record<string,NpcFarmState>,dialogueProgress:Object.fromEntries(npcs.map(npc=>[npc.id,{npcId:npc.id,met:false}])),activeFoodBuffs:[] as ActiveFoodBuff[],lastNpcSyncAt:new Date(now).toISOString()})
 const applyWeatherToPlots=(plots:FarmPlot[],weather:(typeof weatherDefinitions)[number],now:number)=>plots.map(plot=>{if(!plot.cropInstance)return plot;const care=weather.cropEffects?.autoWater?{...(plot.cropInstance.care??{water:50,weeds:false,pests:false}),water:100,wateredAt:new Date(now).toISOString()}:plot.cropInstance.care;const speed=weather.cropEffects?.growthSpeedPercent??0,remaining=Math.max(0,new Date(plot.cropInstance.readyAt).getTime()-now),readyAt=speed?new Date(new Date(plot.cropInstance.readyAt).getTime()-remaining*speed/100).toISOString():plot.cropInstance.readyAt;return{...plot,cropInstance:{...plot.cropInstance,care,readyAt,weatherEffects:{rainExperienced:plot.cropInstance.weatherEffects?.rainExperienced||weather.id==='rain'}}}})
+let lastHarvestMetaAt=0
+const lastHarvestInventoryAt=new Map<string,number>()
 
 interface GameStore extends GameStateData {
   timeOffsetMs: number
   replaceGameData:(data:GameStateData)=>void
+  applyServerHarvestState:(data:GameStateData,plotId:string,cropId:string)=>void
   plantCrop:(plotId:string,cropId:string,quickBuy?:boolean,seedInstanceId?:string)=>void
   applyFertilizer:(plotId:string,fertilizerId:string)=>number
   harvestCrop:(plotId:string)=>{quantity:number;xp:number;leveledUp:boolean;yield:HarvestYieldResult;genetics:HarvestGeneticsResult}
@@ -85,6 +89,12 @@ const changeItem = (items:InventoryItem[],type:ItemType,ref:string,delta:number)
 export const useGameStore = create<GameStore>()(persist((set,get)=>({
   version:SAVE_VERSION, player:initialPlayer(), plots:initialPlots(), inventory:initialInventory, specialSeeds:[],hybridDiscoveries:[],stats:initialStats(), orders:[],currentWeather:initialWeather(),randomEventState:initialEvent(),harvestHistory:[],...initialNpcData(),lastSavedAt:new Date().toISOString(), tutorialStep:0, timeOffsetMs:0,
   replaceGameData:data=>set({...migrateSaveGame(data),timeOffsetMs:0}),
+  applyServerHarvestState:(data,plotId,cropId)=>set(state=>{const remote=migrateSaveGame(data),at=new Date(remote.lastSavedAt).getTime(),remotePlot=remote.plots.find(plot=>plot.id===plotId),plots=remotePlot?state.plots.map(plot=>plot.id===plotId?remotePlot:plot):state.plots;let inventory=state.inventory
+    if(at>=(lastHarvestInventoryAt.get(cropId)??0)){lastHarvestInventoryAt.set(cropId,at);const item=remote.inventory.find(value=>value.itemType==='produce'&&value.referenceId===cropId);inventory=state.inventory.filter(value=>!(value.itemType==='produce'&&value.referenceId===cropId));if(item)inventory=[...inventory,item]}
+    if(at<lastHarvestMetaAt)return{plots,inventory}
+    lastHarvestMetaAt=at
+    return{plots,inventory,player:{...state.player,level:remote.player.level,currentXp:remote.player.currentXp},stats:{...state.stats,harvested:remote.stats.harvested},specialSeeds:remote.specialSeeds,hybridDiscoveries:remote.hybridDiscoveries,harvestHistory:remote.harvestHistory,lastSavedAt:new Date(Math.max(at,new Date(state.lastSavedAt).getTime())).toISOString()}
+  }),
   plantCrop:(plotId,cropId,quickBuy=false,seedInstanceId)=>set(state=>{
     const plot=state.plots.find(p=>p.id===plotId), crop=cropById(cropId)
     if(!plot?.isUnlocked||plot.cropInstance) throw new Error('Luống đất chưa sẵn sàng.')
@@ -137,7 +147,8 @@ export const useGameStore = create<GameStore>()(persist((set,get)=>({
       const genetics:HarvestGeneticsResult={traitMessages,quality,giantQuantity,hybridSeed,hybridAttempted:!!mate}
       result={quantity,xp,leveledUp:level.level>state.player.level,yield:yieldResult,genetics}
       const history:HarvestHistory={id:`harvest-${Date.now()}-${plotId}`,cropId:crop.id,plotId,harvestedAt:new Date().toISOString(),baseQuantity:yieldResult.baseQuantity,bonusQuantity:quantity-yieldResult.baseQuantity,finalQuantity:quantity,isLuckyHarvest:yieldResult.isLuckyHarvest,isPerfectHarvest:yieldResult.isPerfectHarvest,xpReceived:xp}
-      return {inventory:changeItem(state.inventory,'produce',crop.id,quantity),specialSeeds,hybridDiscoveries,plots:state.plots.map(p=>p.id===plotId?{...p,cropInstance:undefined}:p),player:{...state.player,level:level.level,currentXp:level.currentXp},stats:{...state.stats,harvested:state.stats.harvested+quantity},harvestHistory:[history,...state.harvestHistory].slice(0,100),lastSavedAt:new Date().toISOString()}
+      const regrow=crop.repeatableHarvest&&crop.regrowDurationSeconds?{...instance,id:`crop-${now}-${plotId}`,plantedAt:new Date(now).toISOString(),readyAt:new Date(now+crop.regrowDurationSeconds*1000).toISOString(),baseGrowthDuration:crop.regrowDurationSeconds,calculatedGrowthDuration:crop.regrowDurationSeconds,totalReductionSeconds:0,fertilizerUsage:[],lastCalculatedAt:new Date(now).toISOString()}:undefined
+      return {inventory:changeItem(state.inventory,'produce',crop.id,quantity),specialSeeds,hybridDiscoveries,plots:state.plots.map(p=>p.id===plotId?{...p,cropInstance:regrow}:p),player:{...state.player,level:level.level,currentXp:level.currentXp},stats:{...state.stats,harvested:state.stats.harvested+quantity},harvestHistory:[history,...state.harvestHistory].slice(0,100),lastSavedAt:new Date().toISOString()}
     }); return result
   },
   unlockPlot:(plotId)=>set(state=>{const plot=state.plots.find(p=>p.id===plotId);if(!plot||plot.isUnlocked)throw new Error('Luống đất đã mở.');if(state.player.level<plot.requiredLevel)throw new Error(`Cần đạt cấp ${plot.requiredLevel}.`);if(state.player.gold<plot.unlockPrice)throw new Error('Không đủ vàng để mở đất.');return{player:{...state.player,gold:state.player.gold-plot.unlockPrice},plots:state.plots.map(p=>p.id===plotId?{...p,isUnlocked:true}:p),stats:{...state.stats,plotsUnlocked:state.stats.plotsUnlocked+1},lastSavedAt:new Date().toISOString()}}),

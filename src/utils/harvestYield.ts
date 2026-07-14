@@ -12,7 +12,7 @@ export const calculateHarvestYield = ({crop,careState,weather='cloudy',activeBoo
  const weatherPercent=weather==='rainbow'?15:weather==='sunny'?5:weather==='rain'?4:0
  const weatherBonus=Math.floor(adjusted*weatherPercent/100),itemBonus=Math.max(0,Math.floor(activeBoosts))
  const isLuckyHarvest=randomChance(crop.bonusYieldChance+(weather==='rainbow'?.08:0)+luckyChanceBonus/100,random)
- const luckyBonus=isLuckyHarvest?randomInteger(1,crop.maxBonusYield,random):0
+ const luckyBonus=isLuckyHarvest?randomInteger(crop.bonusYieldMin,crop.bonusYieldMax,random):0
  const beforePerfect=adjusted+careBonus+weatherBonus+itemBonus+luckyBonus
  const isPerfectHarvest=randomChance(crop.perfectHarvestChance??0,random)
  const perfectHarvestBonus=isPerfectHarvest?Math.max(1,Math.floor(beforePerfect*((crop.perfectHarvestMultiplier??1)-1))):0
