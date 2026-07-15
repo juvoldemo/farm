@@ -5,7 +5,6 @@ import type { CropDefinition, CropInstance, FarmPlot } from '../types/game'
 import type { GraphicsQuality } from '../types/farm'
 import { cropById } from '../config/crops'
 import { getCropGrowthState } from '../utils/cropGrowth'
-import { formatRemainingTime } from '../utils/time'
 import { formatNumber } from '../utils/currency'
 import { CropVisual } from './farm/CropVisual'
 import { getCropVisualStage } from '../config/cropVisualConfig'
@@ -37,6 +36,7 @@ const lastFertilizedAt = (instance: CropInstance) => {
   return usage ? new Date(usage.usedAt).getTime() : 0
 }
 const wasRecent = (timestamp: number, now: number) => timestamp>0&&now-timestamp>=0&&now-timestamp<2400
+const formatHoursMinutes = (seconds:number) => {const totalMinutes=Math.max(1,Math.ceil(seconds/60)),hours=Math.floor(totalMinutes/60),minutes=totalMinutes%60;return `${hours}g ${minutes.toString().padStart(2,'0')}p`}
 
 export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false,showUnlockDetails=true,visitorAction}:FarmPlotCardProps) {
   const instance = plot.cropInstance
@@ -122,7 +122,7 @@ function RealtimePlantedPlot({plot,crop,timeOffsetMs=0,onClick,highlight=false,r
 const CropCountdown = memo(function CropCountdown({instance,crop,timeOffsetMs,id}:{instance:CropInstance;crop:CropDefinition;timeOffsetMs:number;id:string}) {
   const now = useGameClock(timeOffsetMs)
   const growth = getCropGrowthState(instance,crop,now)
-  return <><span className="crop-progress" aria-hidden="true"><i style={{width:`${growth.growthPercent}%`}}/></span><small id={id}>{formatRemainingTime(growth.remainingSeconds)}</small></>
+  return <small id={id}>{formatHoursMinutes(growth.remainingSeconds)}</small>
 })
 
 function PlotFocusKeeper({children,highlight}:{children:ReactNode;highlight:boolean}) {

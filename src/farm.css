@@ -328,6 +328,8 @@
 .plot-status-card.crop-info { grid-template-columns: minmax(0,1fr) auto; justify-items: stretch; column-gap: 4px; }
 .plot-status-card.crop-info > b { grid-column: 1 / -1; text-align: center; }
 .plot-status-card.crop-info > small { justify-self: end; margin: 0; font-weight: 900; }
+.plot-status-card.crop-info:not(.ready-info) { right: 22%; left: 22%; grid-template-columns: 1fr; min-height: 27px; padding: 3px 5px; border-radius: 8px; }
+.plot.plot-isometric .plot-status-card.crop-info:not(.ready-info) > small { justify-self: center; font-size: 8px; }
 .plot-status-card.crop-info.ready-info { grid-template-columns: 1fr; justify-items: center; }
 
 .plot-isometric .crop-progress {
