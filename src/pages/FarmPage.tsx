@@ -31,7 +31,7 @@ import { supabase } from '../services/supabaseClient'
 import { HybridJournalPanel } from '../components/GeneticsPanels'
 import { EconomyDebugLauncher } from '../components/EconomyDebugPanel'
 import { HarvestInteractionCoordinator, withHarvestTimeout } from '../services/harvestInteractionService'
-import { harvestCropOnServer } from '../services/geneticsApi'
+import { harvestCropOnServer, harvestErrorMessage } from '../services/geneticsApi'
 import { cropById } from '../config/crops'
 import { getCropRemainingTime } from '../utils/cropGrowth'
 import { SoundManager } from '../services/soundService'
@@ -71,7 +71,7 @@ export function FarmPage(){
    onStart:requestId=>{activeRequestId=requestId;setHarvestFeedbacks(current=>({...current,[plot.id]:{quantity:predicted,cropName:crop.name,phase:'harvesting'}}));const settings=useGameStore.getState().player.settings;SoundManager.play('harvest',settings.sound,settings.volume*.7);triggerHapticFeedback('light',settings.haptics);animateFarmer('harvest',plot.plotNumber);if(import.meta.env.DEV)console.debug('[harvest] optimistic-start',{plotId:plot.id,requestId,latencyMs:Math.round(performance.now()-clickedAt)})},
    request:async requestId=>{if(auth.configured){const response=await withHarvestTimeout(harvestCropOnServer(plot.plotNumber,requestId));useGameStore.getState().applyServerHarvestState(response.state,plot.id,crop.id);return{quantity:response.quantity,xp:response.xp,lucky:!!response.hybridSeed||response.giantQuantity>0}}const result=useGameStore.getState().harvestCrop(plot.id);return{quantity:result.quantity,xp:result.xp,lucky:result.yield.isLuckyHarvest||result.yield.isPerfectHarvest||!!result.genetics.hybridSeed}},
    onSuccess:result=>{setHarvestFeedbacks(current=>({...current,[plot.id]:{quantity:result.quantity,cropName:crop.name,phase:'confirmed'}}));if(result.lucky)SoundManager.play('lucky',useGameStore.getState().player.settings.sound,useGameStore.getState().player.settings.volume*.7);if(import.meta.env.DEV)console.debug('[harvest] confirmed',{plotId:plot.id,requestId:activeRequestId,totalMs:Math.round(performance.now()-clickedAt)});clearHarvestFeedback(plot.id,800)},
-   onRollback:()=>{clearHarvestFeedback(plot.id);if(auth.configured)void auth.syncNow();toast.error('Thu hoạch chưa thành công, vui lòng thử lại.')},
+   onRollback:error=>{clearHarvestFeedback(plot.id);if(auth.configured)void auth.syncNow();if(import.meta.env.DEV)console.error('[harvest] failed',{plotId:plot.id,requestId:activeRequestId,error});toast.error(harvestErrorMessage(error))},
   })
  },[auth.configured,auth.syncNow,clearHarvestFeedback])
  const closePlot=()=>{setSelected(undefined);setMode(undefined)}

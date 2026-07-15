@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { HarvestInteractionCoordinator, withHarvestTimeout } from '../src/services/harvestInteractionService'
 import { useGameStore } from '../src/store/gameStore'
 import { crops } from '../src/config/crops'
+import { harvestErrorMessage, shouldRecoverLegacyHarvest } from '../src/services/geneticsApi'
 
 describe('điều phối thu hoạch nhanh theo từng ô',()=>{
  beforeEach(()=>{localStorage.clear();useGameStore.getState().resetGame()})
@@ -32,5 +33,15 @@ describe('điều phối thu hoạch nhanh theo từng ô',()=>{
   const harvest=(plotId:string)=>coordinator.run({plotId,request:async()=>useGameStore.getState().harvestCrop(plotId),onStart:vi.fn(),onSuccess:vi.fn(),onRollback:vi.fn()})
   await Promise.all([harvest('plot-1'),harvest('plot-2')]);const state=useGameStore.getState(),quantity=state.inventory.find(item=>item.itemType==='produce'&&item.referenceId==='cabbage')?.quantity??0
   expect(quantity).toBeGreaterThanOrEqual(crops[0].minHarvestQuantity*2);expect(state.player.currentXp).toBe(crops[0].xpReward*2);expect(state.plots[0].cropInstance).toBeUndefined();expect(state.plots[1].cropInstance).toBeUndefined()
+ })
+
+ it('khôi phục qua v2 khi v3 chặn cây legacy hoặc thời gian bị lệch',()=>{
+  expect(shouldRecoverLegacyHarvest({message:'CROP_NOT_FOUND'})).toBe(true)
+  expect(shouldRecoverLegacyHarvest(new Error('CROP_NOT_MATURE'))).toBe(true)
+  expect(shouldRecoverLegacyHarvest(new Error('INVENTORY_FULL'))).toBe(false)
+ })
+
+ it('hiển thị nguyên nhân hữu ích khi kho đầy',()=>{
+  expect(harvestErrorMessage({message:'INVENTORY_FULL'})).toMatch(/Kho đã đầy/)
  })
 })
