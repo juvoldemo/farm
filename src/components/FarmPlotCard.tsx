@@ -23,6 +23,7 @@ interface FarmPlotCardProps {
   graphicsQuality?: GraphicsQuality
   reducedMotion?: boolean
   showUnlockDetails?: boolean
+  visitorAction?: 'steal'|'stolen'
 }
 
 interface PlantedPlotProps extends Omit<FarmPlotCardProps,'plot'> {
@@ -37,7 +38,7 @@ const lastFertilizedAt = (instance: CropInstance) => {
 }
 const wasRecent = (timestamp: number, now: number) => timestamp>0&&now-timestamp>=0&&now-timestamp<2400
 
-export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false,showUnlockDetails=true}:FarmPlotCardProps) {
+export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false,showUnlockDetails=true,visitorAction}:FarmPlotCardProps) {
   const instance = plot.cropInstance
   const crop = instance ? cropById(instance.cropId) : undefined
   const inactive = readOnly||!!harvestFeedback
@@ -70,10 +71,10 @@ export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onCl
     </motion.button></PlotFocusKeeper>
   }
 
-  return <PlotFocusKeeper highlight={highlight}><RealtimePlantedPlot plot={{...plot,cropInstance:instance}} crop={crop} timeOffsetMs={timeOffsetMs} onClick={onClick} highlight={highlight} readOnly={readOnly} harvestFeedback={harvestFeedback} graphicsQuality={graphicsQuality} reducedMotion={reducedMotion}/></PlotFocusKeeper>
-}, (previous,next) => previous.plot===next.plot&&previous.timeOffsetMs===next.timeOffsetMs&&previous.onClick===next.onClick&&previous.highlight===next.highlight&&previous.readOnly===next.readOnly&&previous.harvestFeedback===next.harvestFeedback&&previous.graphicsQuality===next.graphicsQuality&&previous.reducedMotion===next.reducedMotion&&previous.showUnlockDetails===next.showUnlockDetails)
+  return <PlotFocusKeeper highlight={highlight}><RealtimePlantedPlot plot={{...plot,cropInstance:instance}} crop={crop} timeOffsetMs={timeOffsetMs} onClick={onClick} highlight={highlight} readOnly={readOnly} harvestFeedback={harvestFeedback} graphicsQuality={graphicsQuality} reducedMotion={reducedMotion} visitorAction={visitorAction}/></PlotFocusKeeper>
+}, (previous,next) => previous.plot===next.plot&&previous.timeOffsetMs===next.timeOffsetMs&&previous.onClick===next.onClick&&previous.highlight===next.highlight&&previous.readOnly===next.readOnly&&previous.harvestFeedback===next.harvestFeedback&&previous.graphicsQuality===next.graphicsQuality&&previous.reducedMotion===next.reducedMotion&&previous.showUnlockDetails===next.showUnlockDetails&&previous.visitorAction===next.visitorAction)
 
-function RealtimePlantedPlot({plot,crop,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false}:PlantedPlotProps) {
+function RealtimePlantedPlot({plot,crop,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false,visitorAction}:PlantedPlotProps) {
   const instance = plot.cropInstance
   useGameClockValue(clockNow => {
     const now = clockNow+timeOffsetMs
@@ -89,13 +90,14 @@ function RealtimePlantedPlot({plot,crop,timeOffsetMs=0,onClick,highlight=false,r
   const wateredAt = instance.care?.wateredAt ? new Date(instance.care.wateredAt).getTime() : 0
   const recentlyWatered = wasRecent(wateredAt,now)
   const recentlyFertilized = wasRecent(lastFertilizedAt(instance),now)
-  const inactive = readOnly||!!harvestFeedback
+  const canSteal = visitorAction==='steal'&&growth.isReadyToHarvest
+  const inactive = (readOnly&&!canSteal)||!!harvestFeedback
   const activate = inactive ? undefined : () => onClick?.(plot)
   const countdownId = `plot-${plot.plotNumber}-countdown`
   const label = growth.isReadyToHarvest
-    ? `Ô đất số ${plot.plotNumber}, cây ${crop.name} đã trưởng thành${readOnly?', chỉ xem':', nhấn để thu hoạch'}`
+    ? `Ô đất số ${plot.plotNumber}, cây ${crop.name} đã trưởng thành${canSteal?', nhấn để ăn trộm':readOnly?', chỉ xem':', nhấn để thu hoạch'}`
     : `Ô đất số ${plot.plotNumber}, cây ${crop.name} đang sinh trưởng${readOnly?', chỉ xem':''}`
-  const commonClass = `${readOnly?'visitor-plot ':''}${highlight?'tutorial-plot ':''}${harvestFeedback?'harvesting ':''}`
+  const commonClass = `${readOnly?'visitor-plot ':''}${canSteal?'stealable ':''}${highlight?'tutorial-plot ':''}${harvestFeedback?'harvesting ':''}`
 
   return <motion.button type="button" whileHover={inactive||reducedMotion?undefined:{y:-3}} whileTap={inactive||reducedMotion?undefined:{scale:.96}} aria-label={harvestFeedback?`Ô đất số ${plot.plotNumber}, đang thu hoạch cây ${crop.name}, dự kiến nhận ${harvestFeedback.quantity} sản phẩm và ${harvestFeedback.xp} XP`:label} aria-describedby={growth.isReadyToHarvest?undefined:countdownId} aria-disabled={inactive} data-plot-number={plot.plotNumber} data-status={growth.isReadyToHarvest?'harvestable':'growing'} data-crop-stage={visualStage} style={plotStyle(plot.plotNumber)} className={`plot plot-isometric planted crop-${visualStage} ${growth.isReadyToHarvest?'ready ':''}${recentlyWatered?'just-watered ':''}${recentlyFertilized?'just-fertilized ':''}${commonClass}`} onClick={activate}>
     <span className={`plot-visual ${highlight?'tutorial-highlight':''}`} aria-hidden="true">
@@ -111,7 +113,7 @@ function RealtimePlantedPlot({plot,crop,timeOffsetMs=0,onClick,highlight=false,r
       <span className="plot-number">#{plot.plotNumber}</span>
       {!growth.isReadyToHarvest&&<span className="care-flags">{(instance.care?.water??50)<35?'💧':''}{instance.care?.weeds?'🌿':''}{instance.care?.pests?'🐛':''}</span>}
       {!!instance.traits?.length&&<span className="plot-genetics" title="Cây có đặc tính">🧬</span>}
-      <span className="plot-status-card crop-info"><b>{crop.name}</b>{growth.isReadyToHarvest?<span className="harvest-label"><ShoppingBasket /> {harvestFeedback?'Đang nhận':readOnly?'Đã chín':'Thu hoạch'}</span>:<CropCountdown instance={instance} crop={crop} timeOffsetMs={timeOffsetMs} id={countdownId}/>}</span>
+      <span className={`plot-status-card crop-info ${growth.isReadyToHarvest?'ready-info':''}`}>{growth.isReadyToHarvest?<span className={`harvest-label ${canSteal?'steal-label':''}`}><ShoppingBasket /> {harvestFeedback?'Đang nhận':canSteal?'Ăn trộm':visitorAction==='stolen'?'Đã bị lấy':readOnly?'Đã chín':'Thu hoạch'}</span>:<CropCountdown instance={instance} crop={crop} timeOffsetMs={timeOffsetMs} id={countdownId}/>}</span>
     </span>
     {harvestFeedback&&<span className="harvest-reward" aria-hidden="true"><span>{crop.icon}</span> +{harvestFeedback.quantity} {harvestFeedback.cropName} · +{harvestFeedback.xp} XP</span>}
   </motion.button>

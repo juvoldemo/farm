@@ -54,6 +54,13 @@ describe('FarmPlotCard accessibility states', () => {
     expect(html).toContain('nhấn để thu hoạch')
   })
 
+  it('offers theft only for a mature crop on a friend farm', () => {
+    const html=renderToStaticMarkup(<FarmPlotCard plot={plot({cropInstance:cropInstance(new Date(Date.now()-1000).toISOString())})} readOnly visitorAction="steal" onClick={()=>{}}/>)
+    expect(html).toContain('nhấn để ăn trộm')
+    expect(html).toContain('Ăn trộm')
+    expect(html).toContain('aria-disabled="false"')
+  })
+
   it('renders a legacy crop even when fertilizer history is missing', () => {
     const legacy={...cropInstance(new Date(Date.now()+30_000).toISOString()),fertilizerUsage:undefined} as unknown as CropInstance
     expect(()=>renderToStaticMarkup(<FarmPlotCard plot={plot({cropInstance:legacy})}/>)).not.toThrow()

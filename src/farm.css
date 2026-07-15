@@ -328,6 +328,7 @@
 .plot-status-card.crop-info { grid-template-columns: minmax(0,1fr) auto; justify-items: stretch; column-gap: 4px; }
 .plot-status-card.crop-info > b { grid-column: 1 / -1; text-align: center; }
 .plot-status-card.crop-info > small { justify-self: end; margin: 0; font-weight: 900; }
+.plot-status-card.crop-info.ready-info { grid-template-columns: 1fr; justify-items: center; }
 
 .plot-isometric .crop-progress {
   width: 100%;

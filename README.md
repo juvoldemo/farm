@@ -104,7 +104,7 @@ Chỉnh mảng `prices` và hàm `requiredLevel` trong `src/config/plotUnlockCon
 ## Kết nối Supabase
 
 1. Tạo một project tại [Supabase Dashboard](https://supabase.com/dashboard).
-2. Mở **SQL Editor**, chạy lần lượt `supabase/migrations/001_game_saves.sql` và `supabase/migrations/002_multiplayer_social.sql`.
+2. Mở **SQL Editor**, chạy lần lượt các file trong `supabase/migrations/` từ `001_game_saves.sql` đến `006_friend_crop_theft.sql`.
 3. Xem hướng dẫn đầy đủ về Auth URL, Vercel và kiểm thử nhiều tài khoản tại [`MULTIPLAYER_SETUP.md`](./MULTIPLAYER_SETUP.md).
 4. Trong **Project Settings → API**, sao chép Project URL và publishable/anon key.
 5. Sao chép `.env.example` thành `.env.local`:

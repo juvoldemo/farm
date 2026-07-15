@@ -1,4 +1,5 @@
-import type { FriendFarm, Friendship, PlayerProfile } from '../types/database'
+import type { CropTheftResult, FriendFarm, Friendship, PlayerProfile } from '../types/database'
+import { normalizeCloudState } from './cloudSaveService'
 import { supabase } from './supabaseClient'
 import { mapProfile } from './profileService'
 const client=()=>{if(!supabase)throw new Error('Supabase chưa được cấu hình.');return supabase}
@@ -8,4 +9,6 @@ export const sendFriendRequest=async(target:string)=>{const {error}=await client
 export const respondFriendRequest=async(requestId:string,decision:'accepted'|'rejected'|'blocked')=>{const {error}=await client().rpc('respond_friend_request',{request_id:requestId,decision});if(error)throw error}
 export const removeFriend=async(friendId:string)=>{const {error}=await client().rpc('remove_friend',{friend_id:friendId});if(error)throw error}
 export const cancelFriendRequest=async(requestId:string)=>{const {error}=await client().rpc('cancel_friend_request',{request_id:requestId});if(error)throw error}
-export const loadFriendFarm=async(ownerId:string):Promise<FriendFarm>=>{const {data,error}=await client().rpc('get_friend_farm',{owner_id:ownerId});if(error)throw error;const value=data as {profile:Record<string,unknown>;state:FriendFarm['state']};return{profile:{id:String(value.profile.id),username:String(value.profile.username),displayName:String(value.profile.displayName),playerCode:String(value.profile.playerCode),avatarUrl:value.profile.avatarUrl?String(value.profile.avatarUrl):null,level:Number(value.profile.level),status:value.profile.status==='online'?'online':'offline',lastOnlineAt:String(value.profile.lastOnlineAt)},state:value.state}}
+export const loadFriendFarm=async(ownerId:string):Promise<FriendFarm>=>{const api=client(),[{data,error},{data:stolen,error:stolenError}]=await Promise.all([api.rpc('get_friend_farm',{owner_id:ownerId}),api.rpc('get_stolen_crop_ids',{owner_id:ownerId})]);if(error)throw error;if(stolenError)throw stolenError;const value=data as {profile:Record<string,unknown>;state:FriendFarm['state']};return{profile:{id:String(value.profile.id),username:String(value.profile.username),displayName:String(value.profile.displayName),playerCode:String(value.profile.playerCode),avatarUrl:value.profile.avatarUrl?String(value.profile.avatarUrl):null,level:Number(value.profile.level),status:value.profile.status==='online'?'online':'offline',lastOnlineAt:String(value.profile.lastOnlineAt)},state:value.state,stolenCropInstanceIds:Array.isArray(stolen)?stolen.map(String):[]}}
+
+export const stealFriendCrop=async(ownerId:string,plotIndex:number,requestId=crypto.randomUUID()):Promise<CropTheftResult>=>{const {data,error}=await client().rpc('steal_friend_crop',{p_owner_id:ownerId,p_plot_index:plotIndex,p_request_id:requestId});if(error)throw error;const value=data as Omit<CropTheftResult,'state'>&{state:unknown};return{...value,state:normalizeCloudState(value.state)}}
