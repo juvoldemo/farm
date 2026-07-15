@@ -82,7 +82,7 @@ export function FarmPage(){
   <FarmBackground/><WeatherEffects weather={currentWeather.id}/><div className="sky-decor"><i/><i/><i/></div>
   <TopBar unread={unread} onFriends={()=>setPanel('friends')} onNotifications={()=>setPanel('notifications')} onMissions={()=>setPanel('missions')} onSettings={()=>setPanel('settings')} onDaily={()=>setPanel('daily')} onAccount={()=>setPanel('account')}/>
   {view==='farm'?friendFarm?<FriendFarmView farm={friendFarm} onBack={()=>setFriendFarm(null)}/>:<><div className="farm-shortcuts"><button className="village-path" onClick={()=>setView('village')}><Users/> Sang Xóm nhỏ <ChevronRight/></button></div><main className="farm-layout">
-   <FarmScene plots={plots} timeOffsetMs={timeOffsetMs} farmName={player.name} graphicsQuality={player.settings.graphicsQuality} reducedMotion={player.settings.reducedMotion} character={character} syncStatus={auth.status} onRetrySync={auth.syncNow} onPlotClick={handlePlot} harvestFeedbacks={harvestFeedbacks} highlightPlotNumber={tutorialStep===0?1:undefined}/>
+   <FarmScene plots={plots} timeOffsetMs={timeOffsetMs} graphicsQuality={player.settings.graphicsQuality} reducedMotion={player.settings.reducedMotion} character={character} syncStatus={auth.status} onRetrySync={auth.syncNow} onPlotClick={handlePlot} harvestFeedbacks={harvestFeedbacks} highlightPlotNumber={tutorialStep===0?1:undefined}/>
     <div className="mobile-panel-shell">
      <button type="button" className="mobile-panel-toggle" aria-expanded={mobilePanelOpen} aria-controls="farm-side-panel" onClick={()=>setMobilePanelOpen(open=>!open)}><Trophy/><span>Tình trạng &amp; đơn hàng</span><ChevronRight/></button>
      <aside id="farm-side-panel" className={`side-panel ${mobilePanelOpen?'mobile-open':''}`}>

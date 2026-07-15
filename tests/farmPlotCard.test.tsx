@@ -36,6 +36,12 @@ describe('FarmPlotCard accessibility states', () => {
     expect(html).toContain('yêu cầu cấp 7')
   })
 
+  it('can hide unlock details for plots after the next locked plot', () => {
+    const html=renderToStaticMarkup(<FarmPlotCard plot={plot({plotNumber:9,isUnlocked:false,unlockPrice:26_000,requiredLevel:9})} showUnlockDetails={false}/>)
+    expect(html).toContain('data-status="locked"')
+    expect(html).not.toContain('plot-status-card')
+  })
+
   it('keeps an empty plot as a native keyboard button', () => {
     const html=renderToStaticMarkup(<FarmPlotCard plot={plot()}/>)
     expect(html).toContain('<button')

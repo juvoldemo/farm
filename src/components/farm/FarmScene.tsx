@@ -1,4 +1,4 @@
-import { CloudOff, Leaf, RefreshCw, Sparkles } from 'lucide-react'
+import { CloudOff, RefreshCw, Sparkles } from 'lucide-react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { SyncStatus } from '../../contexts/AuthContext'
 import type { FarmPlot } from '../../types/game'
@@ -12,7 +12,6 @@ import { FarmDecorations } from './FarmDecorations'
 interface FarmSceneProps {
   plots: FarmPlot[]
   timeOffsetMs: number
-  farmName: string
   graphicsQuality: GraphicsQuality
   reducedMotion: boolean
   character: {action: CharacterAction; target: number}
@@ -29,7 +28,7 @@ interface PointerGesture {
   dragged: boolean
 }
 
-export function FarmScene({plots,timeOffsetMs,farmName,graphicsQuality,reducedMotion,character,syncStatus,onRetrySync,onPlotClick,harvestFeedbacks,highlightPlotNumber}:FarmSceneProps) {
+export function FarmScene({plots,timeOffsetMs,graphicsQuality,reducedMotion,character,syncStatus,onRetrySync,onPlotClick,harvestFeedbacks,highlightPlotNumber}:FarmSceneProps) {
   const gesture = useRef<PointerGesture>({x:0,y:0,dragged:false})
   const scrollResetTimer = useRef<number | undefined>(undefined)
   const scrollGuardUntil = useRef(0)
@@ -66,15 +65,7 @@ export function FarmScene({plots,timeOffsetMs,farmName,graphicsQuality,reducedMo
 
   const syncingFailed = syncStatus === 'error' || syncStatus === 'offline'
 
-  return <section className={`farm-board farm-scene graphics-${graphicsQuality} ${syncStatus==='error'?'sync-error ':''}${syncStatus==='offline'?'sync-offline ':''}${isVisible?'':'farm-paused'}`} aria-labelledby="farm-scene-title">
-    <header className="farm-scene-header">
-      <div>
-        <span className="farm-scene-eyebrow"><Leaf /> Khu vườn 2.5D</span>
-        <h1 id="farm-scene-title">24 luống đất của bạn</h1>
-        <p>Chạm để gieo hạt, chăm cây và thu hoạch ngay khi cây chín.</p>
-      </div>
-      <div className="farm-name-sign"><span>Nông trại</span><strong>{farmName}</strong></div>
-    </header>
+  return <section className={`farm-board farm-scene graphics-${graphicsQuality} ${syncStatus==='error'?'sync-error ':''}${syncStatus==='offline'?'sync-offline ':''}${isVisible?'':'farm-paused'}`} aria-label="Nông trại 24 luống đất">
 
     {syncingFailed&&<div id="farm-sync-status" className={`farm-sync-banner ${syncStatus}`} role="status">
       <CloudOff />
@@ -84,7 +75,7 @@ export function FarmScene({plots,timeOffsetMs,farmName,graphicsQuality,reducedMo
 
     <div className="farm-event-rail"><div className="farm-event-scale"><RandomFarmEvent /></div></div>
 
-    <div className="farm-map-viewport" role="region" aria-label="Bản đồ nông trại 24 ô, có thể cuộn trên màn hình nhỏ" aria-describedby={syncingFailed?'farm-sync-status':undefined} tabIndex={0}
+    <div className="farm-map-viewport" role="region" aria-label="Bản đồ nông trại 24 ô đất" aria-describedby={syncingFailed?'farm-sync-status':undefined} tabIndex={0}
       onPointerDownCapture={startGesture} onPointerMoveCapture={trackGesture} onClickCapture={suppressDragClick} onScroll={markScrolling}>
       <div className="farm-map">
         <FarmDecorations />
@@ -99,7 +90,8 @@ export function FarmScene({plots,timeOffsetMs,farmName,graphicsQuality,reducedMo
 }
 
 function FarmGrid({plots,timeOffsetMs,onPlotClick,harvestFeedbacks,highlightPlotNumber,graphicsQuality,reducedMotion}:Pick<FarmSceneProps,'plots'|'timeOffsetMs'|'onPlotClick'|'harvestFeedbacks'|'highlightPlotNumber'|'graphicsQuality'|'reducedMotion'>) {
+  const nextLockedPlotNumber = plots.find(plot=>!plot.isUnlocked)?.plotNumber
   return <div className="farm-grid" role="group" aria-label="24 ô đất">
-    {plots.map(plot=><FarmPlotCard key={plot.id} plot={plot} timeOffsetMs={timeOffsetMs} onClick={onPlotClick} harvestFeedback={harvestFeedbacks[plot.id]} highlight={highlightPlotNumber===plot.plotNumber} graphicsQuality={graphicsQuality} reducedMotion={reducedMotion}/>) }
+    {plots.map(plot=><FarmPlotCard key={plot.id} plot={plot} timeOffsetMs={timeOffsetMs} onClick={onPlotClick} harvestFeedback={harvestFeedbacks[plot.id]} highlight={highlightPlotNumber===plot.plotNumber} graphicsQuality={graphicsQuality} reducedMotion={reducedMotion} showUnlockDetails={plot.isUnlocked||plot.plotNumber===nextLockedPlotNumber}/>) }
   </div>
 }

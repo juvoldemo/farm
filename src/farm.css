@@ -32,62 +32,6 @@
 
 .farm-scene::after { display: none; }
 
-.farm-scene-header {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 22px 10px;
-}
-
-.farm-scene-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #6d9238;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-}
-
-.farm-scene-eyebrow svg { width: 15px; height: 15px; }
-.farm-scene-header h1 { margin: 4px 0 2px; color: #315c2d; font-size: clamp(20px, 2.2vw, 29px); line-height: 1.05; text-shadow: 0 2px #fff; }
-.farm-scene-header p { margin: 0; color: #718363; font-size: 11px; }
-
-.farm-name-sign {
-  position: relative;
-  min-width: 132px;
-  padding: 8px 15px 9px;
-  border: 3px solid #7d4d25;
-  border-radius: 9px 9px 14px 14px;
-  background: linear-gradient(180deg, #f4bd62, #c77b32);
-  color: #5d351b;
-  text-align: center;
-  box-shadow: inset 0 3px rgba(255,255,255,.35), 0 5px 0 #6e421f, 0 8px 14px rgba(65,57,25,.25);
-  transform: rotate(1deg);
-}
-
-.farm-name-sign::before,
-.farm-name-sign::after {
-  content: "";
-  position: absolute;
-  top: -18px;
-  width: 4px;
-  height: 18px;
-  border-radius: 4px;
-  background: #785033;
-}
-
-.farm-name-sign::before { left: 25px; }
-.farm-name-sign::after { right: 25px; }
-.farm-name-sign span,
-.farm-name-sign strong { display: block; }
-.farm-name-sign span { font-size: 9px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
-.farm-name-sign strong { max-width: 150px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-
 .farm-sync-banner {
   position: relative;
   z-index: 6;
@@ -322,10 +266,14 @@
 .plot-isometric .crop-visual-position {
   position: absolute !important;
   z-index: 5;
-  top: 1px;
+  /* The plant's baseline, not its bounding box, should sit at the soil diamond's center. */
+  top: -23px;
   left: 50%;
+  display: grid;
   width: 62px !important;
   height: 67px !important;
+  place-items: center;
+  text-align: center;
   transform: translateX(-50%);
   transform-origin: 50% 100%;
 }
@@ -629,18 +577,14 @@
 @media (max-width: 700px) {
   .farm-layout { padding: 0 7px; }
   .farm-scene { border-width: 3px; border-radius: 23px; }
-  .farm-scene-header { align-items: flex-start; padding: 13px 13px 8px; }
-  .farm-scene-header h1 { font-size: 20px; }
-  .farm-scene-header p { max-width: 205px; font-size: 9px; }
-  .farm-name-sign { min-width: 95px; padding: 6px 8px; }
-  .farm-name-sign strong { max-width: 100px; font-size: 10px; }
   .farm-sync-banner { margin: 0 10px 8px; }
-  .farm-map-viewport { width: calc(100% - 12px); margin: 0 6px; border-radius: 19px; }
-  .farm-map { width: 900px; min-height: 550px; border-radius: 17px; }
-  .farm-scene .farm-grid { grid-template-columns: repeat(6, 120px); grid-auto-rows: 116px; gap: 2px 5px; padding: 82px 91px 42px 45px; }
-  .farm-scene .plot-slot { min-width: 116px; min-height: 112px; }
-  .plot.plot-isometric { min-width: 116px; min-height: 112px; }
-  .farm-scroll-hint { display: flex; }
+  .farm-map-viewport { width: calc(100% - 12px); margin: 0 6px; overflow: clip; overscroll-behavior: auto; border-radius: 19px; }
+  .farm-map { width: 100%; min-height: 0; border-radius: 17px; }
+  .farm-scene .farm-grid { grid-template-columns: repeat(3, minmax(0,1fr)); grid-auto-rows: 116px; gap: 2px 5px; padding: 72px 6px 48px; }
+  .farm-scene .farm-grid > .plot-slot:nth-child(n) { top: 0 !important; left: 0 !important; }
+  .farm-scene .plot-slot { min-width: 0; min-height: 112px; }
+  .plot.plot-isometric { min-width: 0; min-height: 112px; }
+  .farm-scroll-hint { display: none; }
   .farm-scene .farm-tip { margin: 8px 10px 12px; font-size: 9px; }
   .farm-event-rail { margin: 0 9px; }
   .farm-event-scale { top: 3px; transform: scale(.58); }
@@ -680,9 +624,6 @@
 }
 
 @media (max-width: 390px) {
-  .farm-scene-header p { display: none; }
-  .farm-name-sign { min-width: 84px; }
-  .farm-name-sign strong { max-width: 84px; font-size: 9px; }
   .farm-scene .farm-tip { display: none; }
   .farm-scroll-hint { margin-bottom: 10px; }
 }

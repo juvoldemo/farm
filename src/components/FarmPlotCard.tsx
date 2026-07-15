@@ -22,6 +22,7 @@ interface FarmPlotCardProps {
   harvestFeedback?: HarvestFeedback
   graphicsQuality?: GraphicsQuality
   reducedMotion?: boolean
+  showUnlockDetails?: boolean
 }
 
 interface PlantedPlotProps extends Omit<FarmPlotCardProps,'plot'> {
@@ -36,7 +37,7 @@ const lastFertilizedAt = (instance: CropInstance) => {
 }
 const wasRecent = (timestamp: number, now: number) => timestamp>0&&now-timestamp>=0&&now-timestamp<2400
 
-export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false}:FarmPlotCardProps) {
+export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false,showUnlockDetails=true}:FarmPlotCardProps) {
   const instance = plot.cropInstance
   const crop = instance ? cropById(instance.cropId) : undefined
   const inactive = readOnly||!!harvestFeedback
@@ -50,7 +51,7 @@ export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onCl
         <span className="plot-ground-shadow" />
         <span className="plot-island"><span className="plot-top-face"><span className="plot-lock-medallion"><LockKeyhole /></span></span></span>
       </span>
-      <span className="plot-hud"><span className="plot-number">#{plot.plotNumber}</span><span className="plot-status-card"><b>{formatNumber(plot.unlockPrice)} vàng</b><small>Cần cấp {plot.requiredLevel}</small></span></span>
+      <span className="plot-hud"><span className="plot-number">#{plot.plotNumber}</span>{showUnlockDetails&&<span className="plot-status-card"><b>{formatNumber(plot.unlockPrice)} vàng</b><small>Cần cấp {plot.requiredLevel}</small></span>}</span>
     </motion.button></PlotFocusKeeper>
   }
 
@@ -70,7 +71,7 @@ export const FarmPlotCard = memo(function FarmPlotCard({plot,timeOffsetMs=0,onCl
   }
 
   return <PlotFocusKeeper highlight={highlight}><RealtimePlantedPlot plot={{...plot,cropInstance:instance}} crop={crop} timeOffsetMs={timeOffsetMs} onClick={onClick} highlight={highlight} readOnly={readOnly} harvestFeedback={harvestFeedback} graphicsQuality={graphicsQuality} reducedMotion={reducedMotion}/></PlotFocusKeeper>
-}, (previous,next) => previous.plot===next.plot&&previous.timeOffsetMs===next.timeOffsetMs&&previous.onClick===next.onClick&&previous.highlight===next.highlight&&previous.readOnly===next.readOnly&&previous.harvestFeedback===next.harvestFeedback&&previous.graphicsQuality===next.graphicsQuality&&previous.reducedMotion===next.reducedMotion)
+}, (previous,next) => previous.plot===next.plot&&previous.timeOffsetMs===next.timeOffsetMs&&previous.onClick===next.onClick&&previous.highlight===next.highlight&&previous.readOnly===next.readOnly&&previous.harvestFeedback===next.harvestFeedback&&previous.graphicsQuality===next.graphicsQuality&&previous.reducedMotion===next.reducedMotion&&previous.showUnlockDetails===next.showUnlockDetails)
 
 function RealtimePlantedPlot({plot,crop,timeOffsetMs=0,onClick,highlight=false,readOnly=false,harvestFeedback,graphicsQuality='medium',reducedMotion=false}:PlantedPlotProps) {
   const instance = plot.cropInstance
