@@ -49,7 +49,7 @@ export interface CropInstance {
 }
 export interface FarmPlot { id: string; plotNumber: number; isUnlocked: boolean; unlockPrice: number; requiredLevel: number; cropInstance?: CropInstance }
 export interface InventoryItem { id: string; itemType: ItemType; referenceId: string; quantity: number }
-export interface PlayerSettings { music: boolean; sound: boolean; reducedMotion: boolean; haptics: boolean; volume: number }
+export interface PlayerSettings { music: boolean; sound: boolean; reducedMotion: boolean; haptics: boolean; volume: number; graphicsQuality: import('./farm').GraphicsQuality }
 export interface Player {
   id: string; name: string; level: number; currentXp: number; gold: number
   energy: number; inventoryCapacity: number; createdAt: string; lastLoginAt: string; settings: PlayerSettings

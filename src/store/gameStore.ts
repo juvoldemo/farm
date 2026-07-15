@@ -32,7 +32,7 @@ const initialInventory: InventoryItem[] = [
   {id:itemId('fertilizer','small'),itemType:'fertilizer',referenceId:'small',quantity:2},
 ]
 const initialPlots = (): FarmPlot[] => plotUnlockConfig.map(p => ({id:`plot-${p.plotNumber}`,plotNumber:p.plotNumber,isUnlocked:p.plotNumber<=INITIAL_UNLOCKED_PLOTS,unlockPrice:p.price,requiredLevel:p.requiredLevel}))
-const initialPlayer = (): Player => ({id:'local-player',name:'Bé Nông Dân',level:1,currentXp:0,gold:STARTING_COINS,energy:20,inventoryCapacity:100,createdAt:new Date().toISOString(),lastLoginAt:new Date().toISOString(),settings:{music:true,sound:true,reducedMotion:false,haptics:true,volume:.55}})
+const initialPlayer = (): Player => ({id:'local-player',name:'Bé Nông Dân',level:1,currentXp:0,gold:STARTING_COINS,energy:20,inventoryCapacity:100,createdAt:new Date().toISOString(),lastLoginAt:new Date().toISOString(),settings:{music:true,sound:true,reducedMotion:false,haptics:true,volume:.55,graphicsQuality:'medium'}})
 const initialStats = (): Stats => ({planted:0,harvested:0,sold:0,fertilizersUsed:0,plotsUnlocked:0})
 const initialWeather=():WeatherState=>({id:'sunny',startedAt:new Date().toISOString(),endsAt:new Date(Date.now()+20*60_000).toISOString(),seed:Date.now()})
 const initialEvent=():RandomEventState=>({claimedToday:0,dayKey:new Date().toISOString().slice(0,10)})

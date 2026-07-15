@@ -5,6 +5,7 @@ import './styles.css'
 import './multiplayer.css'
 import './genetics.css'
 import './genetics-shop.css'
+import './farm.css'
 import { AuthProvider } from './contexts/AuthContext'
 import { GameErrorBoundary } from './components/GameErrorBoundary'
 createRoot(document.getElementById('root')!).render(<StrictMode><GameErrorBoundary><AuthProvider><App/></AuthProvider></GameErrorBoundary></StrictMode>)
